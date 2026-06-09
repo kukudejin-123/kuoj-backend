@@ -103,6 +103,7 @@ knife4j:
 # 代码沙箱配置
 # type 可选值: example(本地示例) / remote(远程沙箱) / thirdParty(第三方沙箱)
 codesandbox:
-  type: example
+  type: remote
+  url: http://localhost:8090/executeCode
 #  type 为 remote 时，需配置远程沙箱地址
 #  url: http://localhost:8090/executeCode

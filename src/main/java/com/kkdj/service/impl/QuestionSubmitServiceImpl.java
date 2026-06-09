@@ -102,8 +102,22 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         }
         // 执行判题服务
         Long questionSubmitId = questionSubmit.getId();
+        System.out.println("========== 开始执行判题服务，提交ID: " + questionSubmitId + " ==========");
         CompletableFuture.runAsync(() -> {
-            judgeService.doJudge(questionSubmitId);
+            try {
+                System.out.println("========== 异步任务开始执行 ==========");
+                judgeService.doJudge(questionSubmitId);
+                System.out.println("========== 异步任务执行完成 ==========");
+            } catch (Exception e) {
+                System.out.println("========== 判题异常: " + e.getMessage() + " ==========");
+                e.printStackTrace();
+                // 更新提交状态为失败
+                QuestionSubmit failUpdate = new QuestionSubmit();
+                failUpdate.setId(questionSubmitId);
+                failUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
+                failUpdate.setJudgeInfo("{\"message\":\"判题异常: " + e.getMessage() + "\"}");
+                this.updateById(failUpdate);
+            }
         });
         return questionSubmitId;
 
@@ -122,6 +136,7 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
             return queryWrapper;
         }
 
+        Long id = questionSubmitQueryRequest.getId();
         String language = questionSubmitQueryRequest.getLanguage();
         String status = questionSubmitQueryRequest.getStatus();
         Long questionId = questionSubmitQueryRequest.getQuestionId();
@@ -131,11 +146,12 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
 
 
         // 拼接查询条件
+        queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjectUtils.isNotEmpty(language), "language", language);
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         queryWrapper.eq(ObjectUtils.isNotEmpty(questionId), "questionId", questionId);
         queryWrapper.eq(QuestionSubmitStatusEnum.getEnumByValue(status)!=null, "status", status);
-        queryWrapper.eq("isDelete",false);
+        queryWrapper.eq("isDelete", 0);
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
                 sortField);
         return queryWrapper;
@@ -157,7 +173,7 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
 
         // 处理脱敏
         // 不是当前用户或者不是管理员，不能获取提交的代码
-        if (userId != questionSubmit.getUserId() && !userService.isAdmin(loginUser)){
+        if (!questionSubmit.getUserId().equals(userId) && !userService.isAdmin(loginUser)){
             questionSubmitVO.setCode(null);
         }
         return questionSubmitVO;

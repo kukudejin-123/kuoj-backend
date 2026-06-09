@@ -39,21 +39,26 @@ public class JudgeServiceImpl implements JudgeService {
     @Value("${codesandbox.type:example}")
     private String type;
 
+    @Value("${codesandbox.url:http://localhost:8090/executeCode}")
+    private String sandboxUrl;
+
     @Resource
     private JudgeManager judgeManager;
 
 
     @Override
     public QuestionSubmit doJudge(long questionSubmitId) {
+        System.out.println("========== doJudge 方法被调用，提交ID: " + questionSubmitId + " ==========");
         // 1)传入题目的提交id，获取到对应的题目，提交信息
         QuestionSubmit questionSubmit = questionSubmitService.getById(questionSubmitId);
+        System.out.println("========== 获取到提交记录: " + questionSubmit + " ==========");
         if (questionSubmit == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "提交记录不存在");
         }
 
         Long questionId = questionSubmit.getQuestionId();
         Question question = questionService.getById(questionId);
-
+        System.out.println("========== 获取到题目: " + question + " ==========");
         if (question == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "题目不存在");
         }
@@ -75,7 +80,7 @@ public class JudgeServiceImpl implements JudgeService {
         JudgeInfo judgeInfo = null;
         try {
             // 4）调用沙箱，获取到执行结果
-            CodeSandbox codeSandbox = CodeSandboxFactory.newInstance(type);
+            CodeSandbox codeSandbox = CodeSandboxFactory.newInstance(type, sandboxUrl);
             String code = questionSubmit.getCode();
             String language = questionSubmit.getLanguage();
             // 获取输入用例
@@ -90,6 +95,9 @@ public class JudgeServiceImpl implements JudgeService {
                     .build();
             ExecuteCodeResponse excuteCodeResponse = codeSandbox.executeCode(excuteCodeRequest);
             List<String> outputList = excuteCodeResponse.getOutputList();
+            log.info("判题输入: {}", inputList);
+            log.info("判题输出: {}", outputList);
+            log.info("期望输出: {}", judgeCaseList.stream().map(JudgeCase::getOutput).collect(Collectors.toList()));
             // 5）根据代码沙箱执行结果，设置题目的判题状态和信息
             JudgeContext judgeContext = new JudgeContext();
             judgeContext.setJudgeInfo(excuteCodeResponse.getJudgeInfo());
