@@ -101,9 +101,17 @@ knife4j:
           - com.kkdj.kkdj.controller
 
 # 代码沙箱配置
-# type 可选值: example(本地示例) / remote(远程沙箱) / thirdParty(第三方沙箱)
+# type 可选值:
+#   - example: 本地示例（仅供测试）
+#   - remote: 远程自建沙箱（需要自己部署）
+#   - judge0: Judge0公共API（开发测试推荐）
+#   - piston: Piston自建服务（生产环境推荐）
+#   - thirdParty: 第三方沙箱
 codesandbox:
-  type: remote
+  type: judge0
+  # remote 类型配置（自建Java沙箱）
   url: http://localhost:8090/executeCode
-#  type 为 remote 时，需配置远程沙箱地址
-#  url: http://localhost:8090/executeCode
+  # piston 类型配置（自建Piston服务）
+  piston-url: http://localhost:2000/api/v2/piston/execute
+  # judge0 类型配置（公共API或自建服务）
+  judge0-url: https://ce.judge0.com/submissions

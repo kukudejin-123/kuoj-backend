@@ -42,6 +42,12 @@ public class JudgeServiceImpl implements JudgeService {
     @Value("${codesandbox.url:http://localhost:8090/executeCode}")
     private String sandboxUrl;
 
+    @Value("${codesandbox.piston-url:http://localhost:2000/api/v2/piston/execute}")
+    private String pistonUrl;
+
+    @Value("${codesandbox.judge0-url:https://ce.judge0.com/submissions}")
+    private String judge0Url;
+
     @Resource
     private JudgeManager judgeManager;
 
@@ -80,7 +86,7 @@ public class JudgeServiceImpl implements JudgeService {
         JudgeInfo judgeInfo = null;
         try {
             // 4）调用沙箱，获取到执行结果
-            CodeSandbox codeSandbox = CodeSandboxFactory.newInstance(type, sandboxUrl);
+            CodeSandbox codeSandbox = CodeSandboxFactory.newInstance(type, sandboxUrl, pistonUrl, judge0Url);
             String code = questionSubmit.getCode();
             String language = questionSubmit.getLanguage();
             // 获取输入用例
@@ -98,6 +104,7 @@ public class JudgeServiceImpl implements JudgeService {
             log.info("判题输入: {}", inputList);
             log.info("判题输出: {}", outputList);
             log.info("期望输出: {}", judgeCaseList.stream().map(JudgeCase::getOutput).collect(Collectors.toList()));
+            log.info("沙箱返回状态: {}, 消息: {}", excuteCodeResponse.getStatus(), excuteCodeResponse.getJudgeInfo() != null ? excuteCodeResponse.getJudgeInfo().getMessage() : "null");
             // 5）根据代码沙箱执行结果，设置题目的判题状态和信息
             JudgeContext judgeContext = new JudgeContext();
             judgeContext.setJudgeInfo(excuteCodeResponse.getJudgeInfo());
@@ -111,7 +118,16 @@ public class JudgeServiceImpl implements JudgeService {
             // 6）更新判题结果信息
             questionSubmitUpdate = new QuestionSubmit();
             questionSubmitUpdate.setId(questionSubmitId);
-            questionSubmitUpdate.setStatus(QuestionSubmitStatusEnum.SUCCEED.getValue());
+            // 根据判题结果设置状态：成功 为成功，其他为失败
+            String judgeMessage = judgeInfo.getMessage();
+            System.out.println("判题结果消息: " + judgeMessage);
+            if ("成功".equals(judgeMessage)) {
+                questionSubmitUpdate.setStatus(QuestionSubmitStatusEnum.SUCCEED.getValue());
+                System.out.println("设置状态为: 成功(2)");
+            } else {
+                questionSubmitUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
+                System.out.println("设置状态为: 失败(3)");
+            }
             questionSubmitUpdate.setJudgeInfo(JSONUtil.toJsonStr(judgeInfo));
             update = questionSubmitService.updateById(questionSubmitUpdate);
             if (!update) {
