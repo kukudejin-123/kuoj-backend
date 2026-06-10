@@ -1,11 +1,11 @@
 package com.kkdj.judge.strategy.impl;
 
 import cn.hutool.json.JSONUtil;
+import com.kkdj.judge.codeSandbox.model.JudgeInfo;
 import com.kkdj.judge.strategy.JudgeContext;
 import com.kkdj.judge.strategy.JudgeStrategy;
 import com.kkdj.model.dto.question.JudgeCase;
 import com.kkdj.model.dto.question.JudgeConfig;
-import com.kkdj.judge.codeSandbox.model.JudgeInfo;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.enums.JudgeInfoMessageEnum;
 
@@ -38,18 +38,47 @@ public class DefaultJudgeStrategyImpl implements JudgeStrategy {
         judgeInfoResponse.setMemory(memory);
         judgeInfoResponse.setTime(time);
 
+        // 先检查时间和内存限制（优先级高于沙箱返回的状态）
+        String judgeConfigStr = question.getJudgeConfig();
+        JudgeConfig judgeConfig = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
+        long memoryLimit = judgeConfig.getMemoryLimit();
+        long timeLimit = judgeConfig.getTimeLimit();
+
         // 如果沙箱已经返回了错误状态（编译错误、运行错误、超时等），直接返回
         String sandboxMessage = judgeInfo.getMessage();
         System.out.println("DefaultJudgeStrategy - 沙箱返回消息: " + sandboxMessage);
+        System.out.println("DefaultJudgeStrategy - 实际时间: " + time + "ms, 限制: " + timeLimit + "ms");
+        System.out.println("DefaultJudgeStrategy - 实际内存: " + memory + "KB, 限制: " + memoryLimit + "KB");
+
         if (sandboxMessage != null && !sandboxMessage.isEmpty()) {
             JudgeInfoMessageEnum sandboxStatus = JudgeInfoMessageEnum.getEnumByValue(sandboxMessage);
             System.out.println("DefaultJudgeStrategy - 解析后的状态: " + (sandboxStatus != null ? sandboxStatus.getValue() : "null"));
             if (sandboxStatus != null && sandboxStatus != JudgeInfoMessageEnum.ACCEPTED) {
-                // 沙箱已经判断出错误（编译错误、运行错误、超时等），直接返回
+                // 沙箱已经判断出错误（编译错误、运行错误、超时等）
+                // 但我们仍然需要检查内存是否超限（沙箱可能没有正确检测）
+                if (memory > memoryLimit && sandboxStatus != JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED) {
+                    System.out.println("DefaultJudgeStrategy - 内存超限，覆盖沙箱状态");
+                    judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+                    return judgeInfoResponse;
+                }
                 System.out.println("DefaultJudgeStrategy - 直接返回沙箱状态: " + sandboxMessage);
                 judgeInfoResponse.setMessage(sandboxMessage);
                 return judgeInfoResponse;
             }
+        }
+
+        // 检查时间限制
+        if (time > timeLimit) {
+            System.out.println("DefaultJudgeStrategy - 时间超限");
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
+        }
+
+        // 检查内存限制
+        if (memory > memoryLimit) {
+            System.out.println("DefaultJudgeStrategy - 内存超限");
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
         }
 
         // 沙箱执行成功，需要判断答案是否正确
@@ -89,23 +118,6 @@ public class DefaultJudgeStrategyImpl implements JudgeStrategy {
             }
         }
         System.out.println("DefaultJudgeStrategy - 所有用例匹配成功");
-
-        // 判断其他条件是否符合要求，比如时间、内存限制
-        String judgeConfigStr = question.getJudgeConfig();
-        JudgeConfig judgeConfig = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
-        long memoryLimit = judgeConfig.getMemoryLimit();
-        long timeLimit = judgeConfig.getTimeLimit();
-
-        if (time > timeLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
-        if (memory > memoryLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
 
         judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
         return judgeInfoResponse;

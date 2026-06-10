@@ -31,22 +31,42 @@ public class IgnoreCaseJudgeStrategyImpl implements JudgeStrategy {
         judgeInfoResponse.setMemory(memory);
         judgeInfoResponse.setTime(time);
 
-        // 如果沙箱已经返回了错误状态，直接返回
+        // 获取题目配置
+        String judgeConfigStr = question.getJudgeConfig();
+        JudgeConfig config = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
+        long memoryLimit = config.getMemoryLimit();
+        long timeLimit = config.getTimeLimit();
+
+        // 如果沙箱已经返回了错误状态，检查是否应该改为内存超限
         String sandboxMessage = judgeInfo.getMessage();
         if (sandboxMessage != null && !sandboxMessage.isEmpty()) {
             JudgeInfoMessageEnum sandboxStatus = JudgeInfoMessageEnum.getEnumByValue(sandboxMessage);
             if (sandboxStatus != null && sandboxStatus != JudgeInfoMessageEnum.ACCEPTED) {
+                // 即使沙箱没返回内存超限，如果实际内存超过限制，应该返回内存超限
+                if (memory > memoryLimit && sandboxStatus != JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED) {
+                    judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+                    return judgeInfoResponse;
+                }
                 judgeInfoResponse.setMessage(sandboxMessage);
                 return judgeInfoResponse;
             }
         }
 
-        JudgeInfoMessageEnum judgeInfoMessageEnum = JudgeInfoMessageEnum.ACCEPTED;
+        // 检查时间限制
+        if (time > timeLimit) {
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
+        }
+
+        // 检查内存限制
+        if (memory > memoryLimit) {
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
+        }
 
         // 判断输出数量是否一致
         if (outputList.size() != judgeCaseList.size()) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.WRONG_ANSWER.getValue());
             return judgeInfoResponse;
         }
 
@@ -61,30 +81,12 @@ public class IgnoreCaseJudgeStrategyImpl implements JudgeStrategy {
             String actualLower = actualOutput != null ? actualOutput.trim().toLowerCase() : "";
 
             if (!expectedLower.equals(actualLower)) {
-                judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
-                judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+                judgeInfoResponse.setMessage(JudgeInfoMessageEnum.WRONG_ANSWER.getValue());
                 return judgeInfoResponse;
             }
         }
 
-        // 检查时间内存限制
-        String judgeConfigStr = question.getJudgeConfig();
-        JudgeConfig judgeConfig = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
-        long memoryLimit = judgeConfig.getMemoryLimit();
-        long timeLimit = judgeConfig.getTimeLimit();
-
-        if (time > timeLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
-        if (memory > memoryLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
-
-        judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+        judgeInfoResponse.setMessage(JudgeInfoMessageEnum.ACCEPTED.getValue());
         return judgeInfoResponse;
     }
 }

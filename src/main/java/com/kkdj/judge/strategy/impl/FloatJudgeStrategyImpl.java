@@ -17,9 +17,6 @@ import java.util.List;
  */
 public class FloatJudgeStrategyImpl implements JudgeStrategy {
 
-    /**
-     * 默认精度阈值
-     */
     private static final double DEFAULT_PRECISION = 1e-6;
 
     @Override
@@ -37,14 +34,37 @@ public class FloatJudgeStrategyImpl implements JudgeStrategy {
         judgeInfoResponse.setMemory(memory);
         judgeInfoResponse.setTime(time);
 
-        // 如果沙箱已经返回了错误状态，直接返回
+        // 获取题目配置
+        String judgeConfigStr = question.getJudgeConfig();
+        JudgeConfig config = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
+        long memoryLimit = config.getMemoryLimit();
+        long timeLimit = config.getTimeLimit();
+
+        // 如果沙箱已经返回了错误状态，检查是否应该改为内存超限
         String sandboxMessage = judgeInfo.getMessage();
         if (sandboxMessage != null && !sandboxMessage.isEmpty()) {
             JudgeInfoMessageEnum sandboxStatus = JudgeInfoMessageEnum.getEnumByValue(sandboxMessage);
             if (sandboxStatus != null && sandboxStatus != JudgeInfoMessageEnum.ACCEPTED) {
+                // 即使沙箱没返回内存超限，如果实际内存超过限制，应该返回内存超限
+                if (memory > memoryLimit && sandboxStatus != JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED) {
+                    judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+                    return judgeInfoResponse;
+                }
                 judgeInfoResponse.setMessage(sandboxMessage);
                 return judgeInfoResponse;
             }
+        }
+
+        // 检查时间限制
+        if (time > timeLimit) {
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
+        }
+
+        // 检查内存限制
+        if (memory > memoryLimit) {
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED.getValue());
+            return judgeInfoResponse;
         }
 
         // 获取精度阈值
@@ -53,12 +73,9 @@ public class FloatJudgeStrategyImpl implements JudgeStrategy {
             precision = judgeConfig.getFloatPrecision();
         }
 
-        JudgeInfoMessageEnum judgeInfoMessageEnum = JudgeInfoMessageEnum.ACCEPTED;
-
         // 判断输出数量是否一致
         if (outputList.size() != judgeCaseList.size()) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+            judgeInfoResponse.setMessage(JudgeInfoMessageEnum.WRONG_ANSWER.getValue());
             return judgeInfoResponse;
         }
 
@@ -70,40 +87,15 @@ public class FloatJudgeStrategyImpl implements JudgeStrategy {
 
             // 使用浮点数精度比较
             if (!compareWithPrecision(expectedOutput, actualOutput, precision)) {
-                judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
-                judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+                judgeInfoResponse.setMessage(JudgeInfoMessageEnum.WRONG_ANSWER.getValue());
                 return judgeInfoResponse;
             }
         }
 
-        // 检查时间内存限制
-        String judgeConfigStr = question.getJudgeConfig();
-        JudgeConfig config = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
-        long memoryLimit = config.getMemoryLimit();
-        long timeLimit = config.getTimeLimit();
-
-        if (time > timeLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.TIME_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
-        if (memory > memoryLimit) {
-            judgeInfoMessageEnum = JudgeInfoMessageEnum.MEMORY_LIMIT_EXCEEDED;
-            judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
-            return judgeInfoResponse;
-        }
-
-        judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
+        judgeInfoResponse.setMessage(JudgeInfoMessageEnum.ACCEPTED.getValue());
         return judgeInfoResponse;
     }
 
-    /**
-     * 浮点数精度比较
-     * @param expected 期望输出
-     * @param actual 实际输出
-     * @param precision 精度阈值
-     * @return 是否匹配
-     */
     private boolean compareWithPrecision(String expected, String actual, double precision) {
         if (expected == null) expected = "";
         if (actual == null) actual = "";
@@ -116,20 +108,15 @@ public class FloatJudgeStrategyImpl implements JudgeStrategy {
             try {
                 double exp = Double.parseDouble(expected);
                 double act = Double.parseDouble(actual);
-                // 比较差的绝对值是否小于精度阈值
                 return Math.abs(exp - act) < precision;
             } catch (NumberFormatException e) {
                 // 解析失败，回退到字符串比较
             }
         }
 
-        // 不是数字或解析失败，使用字符串精确比较
         return expected.equals(actual);
     }
 
-    /**
-     * 判断字符串是否为数字
-     */
     private boolean isNumeric(String str) {
         if (str == null || str.trim().isEmpty()) {
             return false;
