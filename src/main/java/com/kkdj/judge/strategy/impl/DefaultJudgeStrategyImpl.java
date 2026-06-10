@@ -55,8 +55,12 @@ public class DefaultJudgeStrategyImpl implements JudgeStrategy {
         // 沙箱执行成功，需要判断答案是否正确
         JudgeInfoMessageEnum judgeInfoMessageEnum = JudgeInfoMessageEnum.ACCEPTED;
 
-        // 判断执行结果和用例结果的数量是否一致
-        if (outputList.size() != inputList.size()) {
+        // 判断输出数量是否与期望数量一致
+        int expectedCount = judgeCaseList.size();
+        int actualCount = outputList.size();
+        System.out.println("DefaultJudgeStrategy - 输出数量比对: 期望=" + expectedCount + ", 实际=" + actualCount);
+        if (actualCount != expectedCount) {
+            System.out.println("DefaultJudgeStrategy - 输出行数不一致");
             judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
             judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
             return judgeInfoResponse;
@@ -67,14 +71,24 @@ public class DefaultJudgeStrategyImpl implements JudgeStrategy {
             JudgeCase judgeCase = judgeCaseList.get(i);
             String expectedOutput = judgeCase.getOutput();
             String actualOutput = outputList.get(i);
+
+            System.out.println("DefaultJudgeStrategy - 第" + (i+1) + "个用例:");
+            System.out.println("  期望输出: [" + expectedOutput + "]");
+            System.out.println("  实际输出: [" + actualOutput + "]");
+            System.out.println("  期望trim: [" + (expectedOutput != null ? expectedOutput.trim() : "null") + "]");
+            System.out.println("  实际trim: [" + (actualOutput != null ? actualOutput.trim() : "null") + "]");
+            System.out.println("  是否相等: " + (expectedOutput != null && actualOutput != null && expectedOutput.trim().equals(actualOutput.trim())));
+
             // 去除首尾空白字符后比较，避免换行符/空格差异导致误判
             if (expectedOutput == null || actualOutput == null ||
                 !expectedOutput.trim().equals(actualOutput.trim())) {
+                System.out.println("DefaultJudgeStrategy - 第" + (i+1) + "个用例不匹配");
                 judgeInfoMessageEnum = JudgeInfoMessageEnum.WRONG_ANSWER;
                 judgeInfoResponse.setMessage(judgeInfoMessageEnum.getValue());
                 return judgeInfoResponse;
             }
         }
+        System.out.println("DefaultJudgeStrategy - 所有用例匹配成功");
 
         // 判断其他条件是否符合要求，比如时间、内存限制
         String judgeConfigStr = question.getJudgeConfig();

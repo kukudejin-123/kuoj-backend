@@ -21,4 +21,11 @@ public class JudgeConfig {
      * 堆栈限制(kb)
      */
     private long stackLimit;
+
+    /**
+     * 输入模式
+     * single: 单次输入（每个测试用例独立执行，默认）
+     * loop: 循环输入（合并所有输入一次性执行，程序内部循环读取）
+     */
+    private String inputMode;
 }

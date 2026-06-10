@@ -12,6 +12,7 @@ import com.kkdj.judge.service.JudgeService;
 import com.kkdj.judge.strategy.JudgeContext;
 import com.kkdj.judge.strategy.JudgeManager;
 import com.kkdj.model.dto.question.JudgeCase;
+import com.kkdj.model.dto.question.JudgeConfig;
 import com.kkdj.judge.codeSandbox.model.JudgeInfo;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.entity.QuestionSubmit;
@@ -93,6 +94,24 @@ public class JudgeServiceImpl implements JudgeService {
             String judgeCaseStr = question.getJudgeCase();
             List<JudgeCase> judgeCaseList = JSONUtil.toList(judgeCaseStr, JudgeCase.class);
             List<String> inputList = judgeCaseList.stream().map(JudgeCase::getInput).collect(Collectors.toList());
+
+            // 获取题目配置，判断输入模式
+            String judgeConfigStr = question.getJudgeConfig();
+            JudgeConfig judgeConfig = JSONUtil.toBean(judgeConfigStr, JudgeConfig.class);
+            String inputMode = judgeConfig.getInputMode();
+            boolean isLoopMode = "loop".equals(inputMode);
+
+            // 根据输入模式处理输入列表
+            if (isLoopMode) {
+                // 循环输入模式：合并所有输入，用换行符分隔
+                String mergedInput = String.join("\n", inputList) + "\n";
+                inputList = java.util.Collections.singletonList(mergedInput);
+                log.info("循环输入模式，合并后的输入: {}", mergedInput.replace("\n", "\\n"));
+            } else {
+                // 单次输入模式（默认）：逐个执行
+                log.info("单次输入模式，测试用例数: {}", inputList.size());
+            }
+
             codeSandbox = new CodeSandboxProxy(codeSandbox);
             ExecuteCodeRequest excuteCodeRequest = ExecuteCodeRequest.builder()
                     .code(code)
@@ -101,10 +120,23 @@ public class JudgeServiceImpl implements JudgeService {
                     .build();
             ExecuteCodeResponse excuteCodeResponse = codeSandbox.executeCode(excuteCodeRequest);
             List<String> outputList = excuteCodeResponse.getOutputList();
+
+            // 如果是循环输入模式，需要将输出按行分割
+            if (isLoopMode && outputList.size() == 1) {
+                String mergedOutput = outputList.get(0);
+                // 按换行符分割，并过滤空行
+                outputList = java.util.Arrays.stream(mergedOutput.split("\n"))
+                        .map(String::trim)
+                        .filter(s -> !s.isEmpty())
+                        .collect(java.util.stream.Collectors.toList());
+                log.info("循环输入模式，分割后的输出: {}", outputList);
+            }
+
             log.info("判题输入: {}", inputList);
             log.info("判题输出: {}", outputList);
             log.info("期望输出: {}", judgeCaseList.stream().map(JudgeCase::getOutput).collect(Collectors.toList()));
             log.info("沙箱返回状态: {}, 消息: {}", excuteCodeResponse.getStatus(), excuteCodeResponse.getJudgeInfo() != null ? excuteCodeResponse.getJudgeInfo().getMessage() : "null");
+
             // 5）根据代码沙箱执行结果，设置题目的判题状态和信息
             JudgeContext judgeContext = new JudgeContext();
             judgeContext.setJudgeInfo(excuteCodeResponse.getJudgeInfo());
