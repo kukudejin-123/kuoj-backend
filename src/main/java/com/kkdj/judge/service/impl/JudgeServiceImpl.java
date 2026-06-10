@@ -145,6 +145,7 @@ public class JudgeServiceImpl implements JudgeService {
             judgeContext.setJudgeCaseList(judgeCaseList);
             judgeContext.setQuestion(question);
             judgeContext.setQuestionSubmit(questionSubmit);
+            judgeContext.setJudgeConfig(judgeConfig);  // 传递判题配置（包含 judgeMode）
             judgeInfo = judgeManager.doJudge(judgeContext);
 
             // 6）更新判题结果信息

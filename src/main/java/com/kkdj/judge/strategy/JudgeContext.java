@@ -1,6 +1,7 @@
 package com.kkdj.judge.strategy;
 
 import com.kkdj.model.dto.question.JudgeCase;
+import com.kkdj.model.dto.question.JudgeConfig;
 import com.kkdj.judge.codeSandbox.model.JudgeInfo;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.entity.QuestionSubmit;
@@ -9,7 +10,8 @@ import lombok.Data;
 import java.util.List;
 
 /**
- * 判题上下文(用于定义在策略中传递的参数)*/
+ * 判题上下文(用于定义在策略中传递的参数)
+ */
 @Data
 public class JudgeContext {
 
@@ -28,4 +30,7 @@ public class JudgeContext {
     private Question question;
 
     private QuestionSubmit questionSubmit;
+
+    // 判题配置（包含 judgeMode 等 SPJ 配置）
+    private JudgeConfig judgeConfig;
 }
