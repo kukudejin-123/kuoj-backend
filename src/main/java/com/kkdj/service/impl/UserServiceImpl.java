@@ -24,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 import me.chanjar.weixin.common.bean.WxOAuth2UserInfo;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
@@ -35,9 +36,9 @@ import org.springframework.util.DigestUtils;
 public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements UserService {
 
     /**
-     * 盐值，混淆密码
+     * BCrypt密码加密器
      */
-    public static final String SALT = "kkdj";
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     @Override
     public long userRegister(String userAccount, String userPassword, String checkPassword) {
@@ -63,8 +64,8 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (count > 0) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号重复");
             }
-            // 2. 加密
-            String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
+            // 2. 加密（使用BCrypt）
+            String encryptPassword = PASSWORD_ENCODER.encode(userPassword);
             // 3. 插入数据
             User user = new User();
             user.setUserAccount(userAccount);
@@ -89,15 +90,18 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         if (userPassword.length() < 8) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "密码错误");
         }
-        // 2. 加密
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
+        // 2. 加密并查询用户
         // 查询用户是否存在
         QueryWrapper<User> queryWrapper = new QueryWrapper<>();
         queryWrapper.eq("userAccount", userAccount);
-        queryWrapper.eq("userPassword", encryptPassword);
         User user = this.baseMapper.selectOne(queryWrapper);
         // 用户不存在
         if (user == null) {
+            log.info("user login failed, userAccount cannot match userPassword");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
+        }
+        // 验证密码（使用BCrypt）
+        if (!PASSWORD_ENCODER.matches(userPassword, user.getUserPassword())) {
             log.info("user login failed, userAccount cannot match userPassword");
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户不存在或密码错误");
         }

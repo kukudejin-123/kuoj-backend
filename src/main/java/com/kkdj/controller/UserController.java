@@ -32,15 +32,13 @@ import me.chanjar.weixin.common.bean.oauth2.WxOAuth2AccessToken;
 import me.chanjar.weixin.mp.api.WxMpService;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
-import org.springframework.util.DigestUtils;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import static com.kkdj.service.impl.UserServiceImpl.SALT;
 
 /**
  * 用户接口
@@ -49,6 +47,11 @@ import static com.kkdj.service.impl.UserServiceImpl.SALT;
 @RequestMapping("/user")
 @Slf4j
 public class UserController {
+
+    /**
+     * BCrypt密码加密器
+     */
+    private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     @Resource
     private UserService userService;
@@ -171,7 +174,7 @@ public class UserController {
         BeanUtils.copyProperties(userAddRequest, user);
         // 默认密码 12345678
         String defaultPassword = "12345678";
-        String encryptPassword = DigestUtils.md5DigestAsHex((SALT + defaultPassword).getBytes());
+        String encryptPassword = PASSWORD_ENCODER.encode(defaultPassword);
         user.setUserPassword(encryptPassword);
         boolean result = userService.save(user);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
@@ -225,13 +228,13 @@ public class UserController {
      */
     @GetMapping("/get")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<User> getUserById(long id, HttpServletRequest request) {
+    public BaseResponse<UserVO> getUserById(long id, HttpServletRequest request) {
         if (id <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User user = userService.getById(id);
         ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
-        return ResultUtils.success(user);
+        return ResultUtils.success(userService.getUserVO(user));
     }
 
     /**
@@ -243,8 +246,11 @@ public class UserController {
      */
     @GetMapping("/get/vo")
     public BaseResponse<UserVO> getUserVOById(long id, HttpServletRequest request) {
-        BaseResponse<User> response = getUserById(id, request);
-        User user = response.getData();
+        if (id <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User user = userService.getById(id);
+        ThrowUtils.throwIf(user == null, ErrorCode.NOT_FOUND_ERROR);
         return ResultUtils.success(userService.getUserVO(user));
     }
 
@@ -257,13 +263,15 @@ public class UserController {
      */
     @PostMapping("/list/page")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
-    public BaseResponse<Page<User>> listUserByPage(@RequestBody UserQueryRequest userQueryRequest,
+    public BaseResponse<Page<UserVO>> listUserByPage(@RequestBody UserQueryRequest userQueryRequest,
             HttpServletRequest request) {
         long current = userQueryRequest.getCurrent();
         long size = userQueryRequest.getPageSize();
         Page<User> userPage = userService.page(new Page<>(current, size),
                 userService.getQueryWrapper(userQueryRequest));
-        return ResultUtils.success(userPage);
+        Page<UserVO> userVOPage = new Page<>(current, size, userPage.getTotal());
+        userVOPage.setRecords(userService.getUserVO(userPage.getRecords()));
+        return ResultUtils.success(userVOPage);
     }
 
     /**

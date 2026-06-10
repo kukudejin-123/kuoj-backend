@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Configuration;
  *
  * @author https://github.com/likkdj*/
 @Configuration
-@MapperScan("com.kkdj.kkdj.mapper")
+@MapperScan("com.kkdj.mapper")
 public class MyBatisPlusConfig {
 
     /**

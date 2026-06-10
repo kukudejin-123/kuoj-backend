@@ -83,6 +83,12 @@
             <artifactId>easyexcel</artifactId>
             <version>3.1.1</version>
         </dependency>
+        <!-- Spring Security Crypto (仅使用BCrypt密码加密，不引入完整Security框架) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+            <version>5.7.3</version>
+        </dependency>
         <!-- https://hutool.cn/docs/index.html#/-->
         <dependency>
             <groupId>cn.hutool</groupId>
