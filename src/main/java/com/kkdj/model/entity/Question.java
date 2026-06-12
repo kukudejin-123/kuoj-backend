@@ -12,6 +12,11 @@ public class Question implements Serializable {
     @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
+    /**
+     * 题号（从1001开始递增）
+     */
+    private Integer questionNumber;
+
     private String title;
     private String content;
     private String tags;

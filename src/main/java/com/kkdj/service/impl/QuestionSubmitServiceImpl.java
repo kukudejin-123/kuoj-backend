@@ -26,6 +26,7 @@ import com.kkdj.service.QuestionSubmitService;
 import com.kkdj.utils.SqlUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -142,6 +143,8 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         String status = questionSubmitQueryRequest.getStatus();
         Long questionId = questionSubmitQueryRequest.getQuestionId();
         Long userId = questionSubmitQueryRequest.getUserId();
+        String userName = questionSubmitQueryRequest.getUserName();
+        String judgeResult = questionSubmitQueryRequest.getJudgeResult();
         String sortField = questionSubmitQueryRequest.getSortField();
         String sortOrder = questionSubmitQueryRequest.getSortOrder();
 
@@ -153,6 +156,13 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         queryWrapper.eq(ObjectUtils.isNotEmpty(questionId), "questionId", questionId);
         queryWrapper.eq(QuestionSubmitStatusEnum.getEnumByValue(status)!=null, "status", status);
         queryWrapper.eq("isDelete", 0);
+
+        // 用户名筛选（需要关联用户表，在Controller中处理）
+        // judgeInfo 中的 message 筛选（需要用 like 查询 JSON 字符串）
+        if (StringUtils.isNotBlank(judgeResult)) {
+            queryWrapper.like("judgeInfo", "\"" + judgeResult + "\"");
+        }
+
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
                 sortField);
         return queryWrapper;

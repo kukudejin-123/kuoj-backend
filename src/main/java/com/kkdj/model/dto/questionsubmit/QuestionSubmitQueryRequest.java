@@ -38,6 +38,16 @@ public class QuestionSubmitQueryRequest extends PageRequest implements Serializa
      */
     private Long userId;
 
+    /**
+     * 用户名（模糊搜索）
+     */
+    private String userName;
+
+    /**
+     * 判题结果（如：成功、答案错误、超时等）
+     */
+    private String judgeResult;
+
 
     private static final long serialVersionUID = 1L;
 }

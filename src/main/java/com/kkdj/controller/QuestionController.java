@@ -18,12 +18,15 @@ import com.kkdj.model.dto.questionsubmit.QuestionSubmitQueryRequest;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.entity.QuestionSubmit;
 import com.kkdj.model.entity.User;
+import com.kkdj.model.entity.Contest;
 import com.kkdj.model.vo.QuestionAdminVo;
 import com.kkdj.model.vo.QuestionSubmitVO;
 import com.kkdj.model.vo.QuestionVO;
 import com.kkdj.service.QuestionService;
 import com.kkdj.service.QuestionSubmitService;
 import com.kkdj.service.UserService;
+import com.kkdj.service.ContestService;
+import com.kkdj.service.ContestParticipantService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
@@ -53,6 +56,12 @@ public class QuestionController {
 
     @Resource
     private UserMapper userMapper;
+
+    @Resource
+    private ContestService contestService;
+
+    @Resource
+    private ContestParticipantService contestParticipantService;
 
     // region 增删改查
 
@@ -88,6 +97,18 @@ public class QuestionController {
         question.setUserId(loginUser.getId());
         question.setFavourNum(0);
         question.setThumbNum(0);
+
+        // 自动生成题号：查询当前最大题号，+1
+        QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
+        queryWrapper.orderByDesc("questionNumber");
+        queryWrapper.last("LIMIT 1");
+        Question lastQuestion = questionService.getOne(queryWrapper);
+        int nextNumber = 1001; // 默认从1001开始
+        if (lastQuestion != null && lastQuestion.getQuestionNumber() != null) {
+            nextNumber = lastQuestion.getQuestionNumber() + 1;
+        }
+        question.setQuestionNumber(nextNumber);
+
         boolean result = questionService.save(question);
         ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR);
         long newQuestionId = question.getId();
@@ -196,11 +217,27 @@ public class QuestionController {
         if (question == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
-        // 检查题目是否公开，不公开的题目只有管理员可以查看
+        // 检查题目是否公开
         if (question.getIsPublic() != null && question.getIsPublic() == 0) {
-            User loginUser = userService.getLoginUser(request);
+            User loginUser = userService.getLoginUserPermitNull(request);
+            // 管理员可以查看所有题目
             if (!userService.isAdmin(loginUser)) {
-                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "该题目未公开，无法查看");
+                // 非公开题目，检查是否是比赛题目
+                Long contestId = question.getContestId();
+                if (contestId != null && contestId > 0) {
+                    // 是比赛题目，检查用户是否已报名
+                    if (loginUser == null) {
+                        throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "请先报名参加比赛");
+                    }
+                    boolean joined = contestParticipantService.isUserJoined(contestId, loginUser.getId());
+                    if (!joined) {
+                        throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "请先报名参加比赛");
+                    }
+                    // 已报名，允许查看
+                } else {
+                    // 不是比赛题目，非公开则拒绝
+                    throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "该题目未公开，无法查看");
+                }
             }
         }
         return ResultUtils.success(questionService.getQuestionVO(question, request));
@@ -239,8 +276,16 @@ public class QuestionController {
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
-        Page<Question> questionPage = questionService.page(new Page<>(current, size),
-                questionService.getQueryWrapper(questionQueryRequest));
+        // 判断是否为管理员，管理员可以看到所有题目
+        User loginUser = userService.getLoginUserPermitNull(request);
+        Page<Question> questionPage;
+        if (userService.isAdmin(loginUser)) {
+            questionPage = questionService.page(new Page<>(current, size),
+                    questionService.getAdminQueryWrapper(questionQueryRequest));
+        } else {
+            questionPage = questionService.page(new Page<>(current, size),
+                    questionService.getQueryWrapper(questionQueryRequest));
+        }
         return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
     }
 
@@ -344,6 +389,26 @@ public class QuestionController {
                                                                          HttpServletRequest request) {
         long current = questionSubmitQueryRequest.getCurrent();
         long size = questionSubmitQueryRequest.getPageSize();
+
+        // 用户名筛选：先查询用户ID
+        String userName = questionSubmitQueryRequest.getUserName();
+        if (StringUtils.isNotBlank(userName)) {
+            QueryWrapper<User> userQueryWrapper = new QueryWrapper<>();
+            userQueryWrapper.like("userName", userName);
+            List<User> users = userService.list(userQueryWrapper);
+            if (users.isEmpty()) {
+                // 没有匹配的用户，返回空结果
+                Page<QuestionSubmitVO> emptyPage = new Page<>(current, size, 0);
+                emptyPage.setRecords(new ArrayList<>());
+                return ResultUtils.success(emptyPage);
+            }
+            // 设置用户ID列表作为查询条件
+            List<Long> userIds = users.stream().map(User::getId).collect(Collectors.toList());
+            // 这里简化处理，只取第一个匹配的用户ID（如果需要支持多用户，需要修改查询逻辑）
+            questionSubmitQueryRequest.setUserId(userIds.get(0));
+            questionSubmitQueryRequest.setUserName(null); // 清空userName，避免后续处理
+        }
+
         Page<QuestionSubmit> questionPage = questionSubmitService.page(new Page<>(current, size),
                 // 获取的是所有的列表
                 questionSubmitService.getQueryWrapper(questionSubmitQueryRequest));

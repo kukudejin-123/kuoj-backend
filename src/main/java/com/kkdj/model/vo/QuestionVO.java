@@ -23,6 +23,11 @@ public class QuestionVO implements Serializable {
     private Long id;
 
     /**
+     * 题号（从1001开始）
+     */
+    private Integer questionNumber;
+
+    /**
      * 标题
      */
     private String title;

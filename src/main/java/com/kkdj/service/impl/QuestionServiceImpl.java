@@ -87,7 +87,8 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
     }
 
     /**
-     * 获取查询包装类（用户查询，只显示公开题目）
+     * 获取查询包装类（用户查询）
+     * 管理员可以看到所有题目，普通用户只能看到公开题目
      */
     @Override
     public QueryWrapper<Question> getQueryWrapper(QuestionQueryRequest questionQueryRequest) {
