@@ -13,7 +13,6 @@ import com.kkdj.exception.BusinessException;
 import com.kkdj.exception.ThrowUtils;
 import com.kkdj.mapper.UserMapper;
 import com.kkdj.model.dto.question.*;
-import com.kkdj.model.dto.question.*;
 import com.kkdj.model.dto.questionsubmit.QuestionSubmitAddRequest;
 import com.kkdj.model.dto.questionsubmit.QuestionSubmitQueryRequest;
 import com.kkdj.model.entity.Question;
@@ -58,13 +57,10 @@ public class QuestionController {
     // region 增删改查
 
     /**
-     * 创建
-     *
-     * @param questionAddRequest
-     * @param request
-     * @return
+     * 创建（仅管理员）
      */
     @PostMapping("/add")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addQuestion(@RequestBody QuestionAddRequest questionAddRequest, HttpServletRequest request) {
         if (questionAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
@@ -82,6 +78,10 @@ public class QuestionController {
         JudgeConfig judgeConfig = questionAddRequest.getJudgeConfig();
         if (judgeConfig != null) {
             question.setJudgeConfig(JSONUtil.toJsonStr(judgeConfig));
+        }
+        // 设置默认公开状态
+        if (question.getIsPublic() == null) {
+            question.setIsPublic(1);
         }
         questionService.validQuestion(question, true);
         User loginUser = userService.getLoginUser(request);
@@ -196,6 +196,13 @@ public class QuestionController {
         if (question == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR);
         }
+        // 检查题目是否公开，不公开的题目只有管理员可以查看
+        if (question.getIsPublic() != null && question.getIsPublic() == 0) {
+            User loginUser = userService.getLoginUser(request);
+            if (!userService.isAdmin(loginUser)) {
+                throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "该题目未公开，无法查看");
+            }
+        }
         return ResultUtils.success(questionService.getQuestionVO(question, request));
     }
 
@@ -212,8 +219,9 @@ public class QuestionController {
         long size = questionQueryRequest.getPageSize();
         // 限制爬虫
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        // 管理员可以查看所有题目（包括不公开的）
         Page<Question> questionPage = questionService.page(new Page<>(current, size),
-                questionService.getQueryWrapper(questionQueryRequest));
+                questionService.getAdminQueryWrapper(questionQueryRequest));
         return ResultUtils.success(questionService.getQuestionAdminVOPage(questionPage, request));
     }
 

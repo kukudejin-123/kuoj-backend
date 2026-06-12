@@ -52,6 +52,10 @@ public class QuestionEditRequest implements Serializable {
      */
     private JudgeConfig judgeConfig;
 
+    /**
+     * 是否公开：1-公开，0-仅比赛可见
+     */
+    private Integer isPublic;
 
     private static final long serialVersionUID = 1L;
 }

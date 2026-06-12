@@ -115,3 +115,7 @@ codesandbox:
   piston-url: http://localhost:2000/api/v2/piston/execute
   # judge0 类型配置（公共API或自建服务）
   judge0-url: https://ce.judge0.com/submissions
+logging:
+  level:
+    com.kkdj: debug  # 开发环境
+    # com.kkdj: info  # 生产环境

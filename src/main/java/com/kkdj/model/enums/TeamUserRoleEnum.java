@@ -7,46 +7,38 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * 题目提交编程语言枚举
-*/
-public enum QuestionSubmitLanguageEnum {
-    // java c++ golang
+ * 团队用户角色枚举
+ */
+public enum TeamUserRoleEnum {
 
-    JAVA("java", "java"),
-    CPP("cpp", "cpp"),
-    GOLANG("go", "go"),
-    HTML("html", "html"),
-    PYTHON("python", "python");
+    MEMBER("普通成员", 0),
+    ADMIN("管理员", 1),
+    CAPTAIN("队长", 2);
 
     private final String text;
 
-    private final String value;
+    private final Integer value;
 
-    QuestionSubmitLanguageEnum(String text, String value) {
+    TeamUserRoleEnum(String text, Integer value) {
         this.text = text;
         this.value = value;
     }
 
     /**
      * 获取值列表
-     *
-     * @return
      */
-    public static List<String> getValues() {
+    public static List<Integer> getValues() {
         return Arrays.stream(values()).map(item -> item.value).collect(Collectors.toList());
     }
 
     /**
      * 根据 value 获取枚举
-     *
-     * @param value
-     * @return
      */
-    public static QuestionSubmitLanguageEnum getEnumByValue(String value) {
+    public static TeamUserRoleEnum getEnumByValue(Integer value) {
         if (ObjectUtils.isEmpty(value)) {
             return null;
         }
-        for (QuestionSubmitLanguageEnum anEnum : QuestionSubmitLanguageEnum.values()) {
+        for (TeamUserRoleEnum anEnum : TeamUserRoleEnum.values()) {
             if (anEnum.value.equals(value)) {
                 return anEnum;
             }
@@ -54,7 +46,7 @@ public enum QuestionSubmitLanguageEnum {
         return null;
     }
 
-    public String getValue() {
+    public Integer getValue() {
         return value;
     }
 

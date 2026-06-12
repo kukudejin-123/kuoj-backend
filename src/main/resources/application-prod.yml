@@ -35,3 +35,6 @@ knife4j:
     enable: true
     username: root
     password: 123456
+logging:
+  level:
+    com.kkdj: info  # 生产环境

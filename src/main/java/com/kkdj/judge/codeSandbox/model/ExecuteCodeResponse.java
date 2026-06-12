@@ -16,9 +16,12 @@ public class ExecuteCodeResponse {
      */
     private String message;
     /**
-     * 状态码
+     * 状态码（Integer类型，与代码沙箱服务保持一致）
+     * 1 - 成功
+     * 2 - 沙箱错误
+     * 3 - 用户代码错误
      */
-    private String status;
+    private Integer status;
     /**
      * 判题信息
      */

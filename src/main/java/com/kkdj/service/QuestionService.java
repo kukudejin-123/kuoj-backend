@@ -26,12 +26,20 @@ public interface QuestionService extends IService<Question> {
     void validQuestion(Question question, boolean add);
 
     /**
-     * 获取查询条件
+     * 获取查询条件（用户端，只显示公开题目）
      *
      * @param questionQueryRequest
      * @return
      */
     QueryWrapper<Question> getQueryWrapper(QuestionQueryRequest questionQueryRequest);
+
+    /**
+     * 获取查询条件（管理员端，显示所有题目）
+     *
+     * @param questionQueryRequest
+     * @return
+     */
+    QueryWrapper<Question> getAdminQueryWrapper(QuestionQueryRequest questionQueryRequest);
     
 
     /**

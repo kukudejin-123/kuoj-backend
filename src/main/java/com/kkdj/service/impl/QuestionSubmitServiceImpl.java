@@ -24,6 +24,7 @@ import com.kkdj.model.vo.UserVO;
 import com.kkdj.service.QuestionService;
 import com.kkdj.service.QuestionSubmitService;
 import com.kkdj.utils.SqlUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ObjectUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.context.annotation.Lazy;
@@ -41,6 +42,7 @@ import java.util.stream.Collectors;
 * @description 针对表【qustion_submit(题目提交表)】的数据库操作Service实现
 * @createDate 2024-05-20 11:30:37
 */
+@Slf4j
 @Service
 public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper, QuestionSubmit>
     implements QuestionSubmitService {
@@ -102,20 +104,19 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         }
         // 执行判题服务
         Long questionSubmitId = questionSubmit.getId();
-        System.out.println("========== 开始执行判题服务，提交ID: " + questionSubmitId + " ==========");
+        log.debug("开始执行判题服务，提交ID: {}", questionSubmitId);
         CompletableFuture.runAsync(() -> {
             try {
-                System.out.println("========== 异步任务开始执行 ==========");
+                log.debug("异步任务开始执行");
                 judgeService.doJudge(questionSubmitId);
-                System.out.println("========== 异步任务执行完成 ==========");
+                log.debug("异步任务执行完成");
             } catch (Exception e) {
-                System.out.println("========== 判题异常: " + e.getMessage() + " ==========");
-                e.printStackTrace();
+                log.error("判题异常: {}", e.getMessage(), e);
                 // 更新提交状态为失败
                 QuestionSubmit failUpdate = new QuestionSubmit();
                 failUpdate.setId(questionSubmitId);
                 failUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
-                failUpdate.setJudgeInfo("{\"message\":\"判题异常: " + e.getMessage() + "\"}");
+                failUpdate.setJudgeInfo("{\"message\":\"判题异常\"}");
                 this.updateById(failUpdate);
             }
         });

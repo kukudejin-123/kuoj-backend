@@ -35,7 +35,7 @@ public class QuestionVO implements Serializable {
     /**
      * 初始代码
      */
-    private String SourceCode;
+    private String sourceCode;
 
     /**
      * 标签列表（json 数组）
@@ -93,6 +93,11 @@ public class QuestionVO implements Serializable {
      */
     private UserVO userVO;
 
+    /**
+     * 是否公开：1-公开，0-仅比赛可见
+     */
+    private Integer isPublic;
+
     private static final long serialVersionUID = 1L;
 
     /**
@@ -108,7 +113,7 @@ public class QuestionVO implements Serializable {
         Question question = new Question();
         BeanUtils.copyProperties(questionVO, question);
         List<String> tagList = questionVO.getTags();
-        if (tagList == null){
+        if (tagList != null){
             question.setTags(JSONUtil.toJsonStr(tagList));
         }
         JudgeConfig voJudgeConfig = questionVO.getJudgeConfig();

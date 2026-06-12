@@ -50,5 +50,10 @@ public class QuestionQueryRequest extends PageRequest implements Serializable {
      */
     private Long userId;
 
+    /**
+     * 是否公开（1-公开，0-不公开）
+     */
+    private Integer isPublic;
+
     private static final long serialVersionUID = 1L;
 }

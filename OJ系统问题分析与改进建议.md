@@ -1171,3 +1171,504 @@ router.beforeEach((to, from, next) => {
 ---
 
 > 本文档将持续更新，建议定期回顾和跟踪修复进度。
+
+---
+
+## 七、沙箱安全与恶意提交防御方案
+
+### 7.1 当前系统的安全风险
+
+#### 7.1.1 ExampleCodeSandbox 是假实现
+
+**位置**: `ExampleCodeSandbox.java`
+
+```java
+// 当前代码 - 直接返回输入作为输出，没有真正执行代码
+excuteCodeResponse.setOutputList(inputList);
+excuteCodeResponse.setMessage("测试执行成功");
+```
+
+**影响**:
+- 用户代码根本没有被执行
+- 系统直接把测试用例的输入当作输出来比对
+- 如果测试用例的输入和期望输出不同，就会显示"答案错误"
+
+**示例（A+B 题目）**:
+- 输入：`1 2`
+- 期望输出：`3`
+- 沙箱返回：`1 2`（直接把输入返回）
+- 比对：`1 2` != `3` → **答案错误**
+
+---
+
+### 7.2 恶意提交攻击方式
+
+如果实现真正的代码执行，没有安全防护的情况下，用户可能进行以下恶意攻击：
+
+| 攻击类型 | 代码示例 | 危害 |
+|---------|---------|------|
+| **无限循环** | `while(true){}` | CPU 占满，判题机卡死 |
+| **内存炸弹** | `new byte[1024*1024*1024]` | OOM，系统崩溃 |
+| **Fork 炸弹** | `Runtime.getRuntime().exec("fork炸弹")` | 进程数耗尽，系统崩溃 |
+| **文件删除** | `Runtime.getRuntime().exec("rm -rf /")` | 数据丢失，系统损坏 |
+| **网络攻击** | 访问外部 API 或端口扫描 | 成为攻击跳板 |
+| **线程耗尽** | 创建大量线程 | 系统资源耗尽 |
+| **输出轰炸** | 无限打印输出 | 磁盘占满 |
+| **系统命令** | `Runtime.getRuntime().exec("cat /etc/passwd")` | 信息泄露 |
+
+---
+
+### 7.3 多层防御方案
+
+#### 第一层：资源限制（容器级别）
+
+使用 **Docker** 运行代码，限制资源：
+
+```bash
+docker run \
+  --cpus=1 \           # CPU 限制
+  --memory=256m \      # 内存限制
+  --pids-limit=50 \    # 进程数限制
+  --network=none \     # 禁止网络
+  --read-only \        # 只读文件系统
+  --tmpfs /tmp:rw,noexec,nosuid,size=10m \  # 临时目录
+  -v /tmp/input:/input:ro \  # 只读挂载输入
+  image_name
+```
+
+**关键配置**:
+
+| 限制项 | 建议值 | 说明 |
+|--------|--------|------|
+| CPU | 1 核 | 防止 CPU 占满 |
+| 内存 | 256MB | 防止 OOM |
+| 执行时间 | 1-3 秒 | 根据题目要求 |
+| 输出大小 | 1MB | 防止输出轰炸 |
+| 进程数 | 50 | 防止 fork 炸弹 |
+| 文件写入 | 禁止或限制目录 | 防止文件破坏 |
+
+---
+
+#### 第二层：超时控制
+
+```java
+// 使用 Future + 线程池实现超时
+ExecutorService executor = Executors.newSingleThreadExecutor();
+Future<?> future = executor.submit(() -> {
+    // 执行代码
+});
+
+try {
+    future.get(2, TimeUnit.SECONDS);  // 2秒超时
+} catch (TimeoutException e) {
+    future.cancel(true);  // 中断执行
+    return TIME_LIMIT_EXCEEDED;
+}
+```
+
+---
+
+#### 第三层：代码静态检查（执行前）
+
+检查危险代码模式：
+
+```java
+// 禁止的代码模式
+String[] DANGEROUS_PATTERNS = {
+    "Runtime.getRuntime().exec",  // 执行系统命令
+    "ProcessBuilder",             // 创建进程
+    "java.io.File",               // 文件操作（可选）
+    "while(true)",                // 明显死循环（简单检测）
+    "Thread.sleep",               // 长时间睡眠
+    "System.exit",                // 退出 JVM
+    "for(;;)",                    // 无限循环
+};
+```
+
+---
+
+#### 第四层：沙箱安全策略（Java SecurityManager）
+
+```java
+// 自定义 SecurityManager
+public class SandboxSecurityManager extends SecurityManager {
+    @Override
+    public void checkExec(String cmd) {
+        throw new SecurityException("禁止执行系统命令");
+    }
+    
+    @Override
+    public void checkWrite(String file) {
+        // 只允许写入指定目录
+        if (!file.startsWith("/tmp/sandbox/")) {
+            throw new SecurityException("禁止写入此路径");
+        }
+    }
+    
+    @Override
+    public void checkListen(int port) {
+        throw new SecurityException("禁止网络监听");
+    }
+}
+```
+
+---
+
+#### 第五层：监控与熔断
+
+```java
+// 系统资源监控
+RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
+MemoryMXBean memoryMXBean = ManagementFactory.getMemoryMXBean();
+
+// 如果系统负载过高，拒绝新任务
+if (getSystemLoad() > 0.9) {
+    return SYSTEM_BUSY;
+}
+
+// 队列长度限制
+if (judgeQueue.size() > 100) {
+    return QUEUE_FULL;
+}
+```
+
+---
+
+### 7.4 完整的安全沙箱架构
+
+```
+┌─────────────────────────────────────┐
+│           用户提交代码                │
+└─────────────┬───────────────────────┘
+              ▼
+┌─────────────────────────────────────┐
+│      静态检查（危险代码扫描）          │
+│  - 黑名单关键字匹配                   │
+│  - AST 语法树分析                     │
+└─────────────┬───────────────────────┘
+              ▼
+┌─────────────────────────────────────┐
+│      资源预检查（队列/负载）           │
+│  - 系统负载 < 80%                    │
+│  - 队列长度 < 100                    │
+└─────────────┬───────────────────────┘
+              ▼
+┌─────────────────────────────────────┐
+│      Docker 容器（隔离执行）          │
+│  - CPU 限制 1核                      │
+│  - 内存限制 256MB                    │
+│  - 进程限制 50个                     │
+│  - 无网络访问                        │
+│  - 只读文件系统                      │
+│  - 2秒执行超时                       │
+└─────────────┬───────────────────────┘
+              ▼
+┌─────────────────────────────────────┐
+│      结果收集与清理                   │
+│  - 读取输出文件                      │
+│  - 销毁容器                          │
+│  - 清理临时文件                      │
+└─────────────────────────────────────┘
+```
+
+---
+
+### 7.5 简化方案（不使用 Docker）
+
+如果环境限制无法使用 Docker，可以用 **Linux cgroups + seccomp**：
+
+```java
+// 使用 Linux 命令限制资源
+ProcessBuilder pb = new ProcessBuilder(
+    "bash", "-c",
+    "ulimit -t 2 && " +           // CPU 时间 2秒
+    "ulimit -v 262144 && " +       // 虚拟内存 256MB
+    "ulimit -u 50 && " +            // 最大进程数 50
+    "java -Xmx128m -XX:+UseContainerSupport " +
+    "-Djava.security.manager " +
+    "-Djava.security.policy=sandbox.policy " +
+    "Main"
+);
+```
+
+---
+
+### 7.6 关键配置建议总结
+
+| 方面 | 当前状态 | 建议方案 |
+|------|---------|---------|
+| 代码隔离 | 无 | Docker 容器 |
+| 资源限制 | 无 | CPU/内存/时间/进程数限制 |
+| 网络访问 | 未处理 | 完全禁止 |
+| 文件系统 | 未处理 | 只读或限制目录 |
+| 超时控制 | 无 | 2-3秒强制终止 |
+| 静态检查 | 无 | 危险代码模式匹配 |
+| 监控熔断 | 无 | 系统负载监控 |
+
+---
+
+## 八、判题策略增强方案
+
+### 8.1 浮点数精度判断
+
+#### 当前问题
+当前判题是简单的字符串比对：
+```java
+if (!judgeCase.getOutput().equals(outputList.get(i))) {
+    // 答案错误
+}
+```
+
+浮点数比较时，由于精度问题，直接字符串比对会导致误判。
+
+#### 实现方案
+```java
+public class FloatJudgeStrategy implements JudgeStrategy {
+    
+    // 默认精度容忍度
+    private static final double EPSILON = 1e-6;
+    
+    @Override
+    public JudgeInfo doJudge(JudgeContext context) {
+        // ...
+        for (int i = 0; i < judgeCaseList.size(); i++) {
+            String expected = judgeCaseList.get(i).getOutput().trim();
+            String actual = outputList.get(i).trim();
+            
+            if (isFloatComparison(expected, actual)) {
+                if (!compareFloat(expected, actual, EPSILON)) {
+                    return WRONG_ANSWER;
+                }
+            } else {
+                // 原有字符串比对
+                if (!expected.equals(actual)) {
+                    return WRONG_ANSWER;
+                }
+            }
+        }
+    }
+    
+    // 判断是否是浮点数比较
+    private boolean isFloatComparison(String expected, String actual) {
+        try {
+            Double.parseDouble(expected);
+            Double.parseDouble(actual);
+            return true;
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+    
+    // 浮点数精度比较
+    private boolean compareFloat(String expected, String actual, double epsilon) {
+        double exp = Double.parseDouble(expected);
+        double act = Double.parseDouble(actual);
+        return Math.abs(exp - act) < epsilon;
+    }
+}
+```
+
+#### 题目配置
+```json
+{
+  "judgeConfig": {
+    "timeLimit": 1000,
+    "memoryLimit": 65536,
+    "floatPrecision": 1e-6,
+    "judgeMode": "float"
+  }
+}
+```
+
+---
+
+### 8.2 空格处理（SPJ - Special Judge）
+
+#### 当前问题
+当前判题严格比对字符串，多余的空格会导致答案错误。
+
+#### 实现方案
+```java
+public class SpjJudgeStrategy implements JudgeStrategy {
+    
+    @Override
+    public JudgeInfo doJudge(JudgeContext context) {
+        // ...
+        for (int i = 0; i < judgeCaseList.size(); i++) {
+            String expected = judgeCaseList.get(i).getOutput();
+            String actual = outputList.get(i);
+            
+            // 使用标准化处理
+            if (!normalize(expected).equals(normalize(actual))) {
+                return WRONG_ANSWER;
+            }
+        }
+    }
+    
+    // 标准化处理：去除多余空格、统一换行符
+    private String normalize(String str) {
+        return str
+            .trim()                                    // 去除首尾空格
+            .replaceAll("\\s+", " ")                   // 多个空格合并为一个
+            .replaceAll("\\r\\n", "\n")               // 统一换行符
+            .replaceAll(" +\\n", "\n")                // 行尾空格去除
+            .replaceAll("\\n+", "\n");                // 多个换行合并
+    }
+}
+```
+
+#### 配置选项
+```json
+{
+  "judgeConfig": {
+    "ignoreTrailingSpaces": true,
+    "ignoreBlankLines": true,
+    "caseSensitive": true,
+    "judgeMode": "spj"
+  }
+}
+```
+
+---
+
+### 8.3 交互题（Interactive Judge）
+
+#### 概念
+交互题需要程序与判题系统进行实时交互，而不是一次性输入输出。
+
+#### 典型场景
+- **猜数字**：系统想一个数，用户程序猜测，系统反馈大了/小了
+- **迷宫探索**：系统提供迷宫，用户程序发送移动指令，系统返回新位置
+- **游戏AI**：用户程序与系统对弈
+
+#### 实现方案
+```java
+public interface InteractiveJudgeStrategy {
+    
+    /**
+     * 执行交互式判题
+     * @param code 用户代码
+     * @param language 编程语言
+     * @param testCase 测试用例
+     * @return 判题结果
+     */
+    JudgeInfo doInteractiveJudge(String code, String language, InteractiveTestCase testCase);
+}
+
+public class InteractiveJudgeImpl implements InteractiveJudgeStrategy {
+    
+    @Override
+    public JudgeInfo doInteractiveJudge(String code, String language, InteractiveTestCase testCase) {
+        // 启动用户程序
+        Process process = startUserProgram(code, language);
+        
+        // 获取输入输出流
+        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(process.getOutputStream()));
+        
+        try {
+            // 交互循环
+            for (InteractionStep step : testCase.getSteps()) {
+                // 向用户程序发送输入
+                writer.write(step.getInput());
+                writer.flush();
+                
+                // 读取用户程序输出
+                String userOutput = reader.readLine();
+                
+                // 验证输出
+                if (!step.validate(userOutput)) {
+                    return WRONG_ANSWER;
+                }
+            }
+            
+            return ACCEPTED;
+        } catch (IOException e) {
+            return RUNTIME_ERROR;
+        }
+    }
+}
+```
+
+#### 交互题配置示例
+```json
+{
+  "type": "interactive",
+  "steps": [
+    {
+      "input": "5\n",
+      "expectedOutput": "3\n",
+      "maxTime": 1000
+    },
+    {
+      "input": "higher\n",
+      "expectedOutput": "4\n"
+    }
+  ]
+}
+```
+
+---
+
+### 8.4 判题策略工厂模式
+
+```java
+// 判题策略工厂
+public class JudgeStrategyFactory {
+    
+    public static JudgeStrategy getStrategy(JudgeMode mode) {
+        switch (mode) {
+            case EXACT:           // 精确匹配（默认）
+                return new ExactJudgeStrategy();
+            case FLOAT:           // 浮点数精度
+                return new FloatJudgeStrategy();
+            case SPJ:             // 特殊判题（空格处理）
+                return new SpjJudgeStrategy();
+            case INTERACTIVE:     // 交互题
+                return new InteractiveJudgeStrategy();
+            case CUSTOM:          // 自定义判题（上传判题程序）
+                return new CustomJudgeStrategy();
+            default:
+                return new ExactJudgeStrategy();
+        }
+    }
+}
+
+// 题目配置
+public class JudgeConfig {
+    private JudgeMode judgeMode = JudgeMode.EXACT;
+    private double floatPrecision = 1e-6;
+    private boolean ignoreTrailingSpaces = false;
+    private boolean ignoreBlankLines = false;
+    private boolean caseSensitive = true;
+    // ...
+}
+```
+
+---
+
+### 8.5 数据库表设计
+
+```sql
+-- 题目表增加判题配置
+ALTER TABLE question ADD COLUMN judge_mode VARCHAR(50) DEFAULT 'exact';
+ALTER TABLE question ADD COLUMN float_precision DOUBLE DEFAULT 1e-6;
+ALTER TABLE question ADD COLUMN ignore_trailing_spaces TINYINT DEFAULT 0;
+ALTER TABLE question ADD COLUMN ignore_blank_lines TINYINT DEFAULT 0;
+ALTER TABLE question ADD COLUMN case_sensitive TINYINT DEFAULT 1;
+```
+
+---
+
+### 8.6 实现优先级
+
+| 功能 | 难度 | 优先级 | 说明 |
+|------|------|--------|------|
+| 浮点数精度判断 | 低 | 高 | 常见需求，实现简单 |
+| 空格处理(SPJ) | 低 | 高 | 常见需求，实现简单 |
+| 交互题 | 高 | 中 | 架构改动大，需要进程间通信 |
+| 自定义判题 | 中 | 低 | 需要上传和执行判题程序 |
+
+---
+
+> 本文档将持续更新，建议定期回顾和跟踪修复进度。

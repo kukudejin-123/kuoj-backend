@@ -74,23 +74,20 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         if (StringUtils.isNotBlank(content) && content.length() > 8192) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "内容过长");
         }
-        if (StringUtils.isNotBlank(answer) && content.length() > 8192) {
+        if (StringUtils.isNotBlank(answer) && answer.length() > 8192) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "答案过长");
         }
-        if (StringUtils.isNotBlank(judgeCase) && content.length() > 8192) {
+        if (StringUtils.isNotBlank(judgeCase) && judgeCase.length() > 8192) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "判题用例过长");
         }
-        if (StringUtils.isNotBlank(judgeConfig) && content.length() > 8192) {
+        if (StringUtils.isNotBlank(judgeConfig) && judgeConfig.length() > 8192) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "判题配置过长");
         }
 
     }
 
     /**
-     * 获取查询包装类
-     *
-     * @param questionQueryRequest
-     * @return
+     * 获取查询包装类（用户查询，只显示公开题目）
      */
     @Override
     public QueryWrapper<Question> getQueryWrapper(QuestionQueryRequest questionQueryRequest) {
@@ -108,10 +105,53 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         String sortField = questionQueryRequest.getSortField();
         String sortOrder = questionQueryRequest.getSortOrder();
 
+        // 只显示公开题目
+        queryWrapper.eq("isPublic", 1);
+
         // 拼接查询条件
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);
         queryWrapper.like(StringUtils.isNotBlank(content), "content", content);
-        queryWrapper.like(StringUtils.isNotBlank(answer), "content", answer);
+        queryWrapper.like(StringUtils.isNotBlank(answer), "answer", answer);
+        if (CollUtil.isNotEmpty(tags)) {
+            for (String tag : tags) {
+                queryWrapper.like("tags", "\"" + tag + "\"");
+            }
+        }
+        queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
+        queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
+        queryWrapper.eq(ObjectUtils.isNotEmpty(difficulty), "difficulty", difficulty);
+        queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
+                sortField);
+        return queryWrapper;
+    }
+
+    /**
+     * 获取查询包装类（管理员查询，显示所有题目）
+     */
+    @Override
+    public QueryWrapper<Question> getAdminQueryWrapper(QuestionQueryRequest questionQueryRequest) {
+        QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
+        if (questionQueryRequest == null) {
+            return queryWrapper;
+        }
+        Long id = questionQueryRequest.getId();
+        String title = questionQueryRequest.getTitle();
+        String content = questionQueryRequest.getContent();
+        List<String> tags = questionQueryRequest.getTags();
+        String answer = questionQueryRequest.getAnswer();
+        Long userId = questionQueryRequest.getUserId();
+        Integer difficulty = questionQueryRequest.getDifficulty();
+        Integer isPublic = questionQueryRequest.getIsPublic();
+        String sortField = questionQueryRequest.getSortField();
+        String sortOrder = questionQueryRequest.getSortOrder();
+
+        // 管理员可以查看所有题目，但可以根据 isPublic 筛选
+        queryWrapper.eq(ObjectUtils.isNotEmpty(isPublic), "isPublic", isPublic);
+
+        // 拼接查询条件
+        queryWrapper.like(StringUtils.isNotBlank(title), "title", title);
+        queryWrapper.like(StringUtils.isNotBlank(content), "content", content);
+        queryWrapper.like(StringUtils.isNotBlank(answer), "answer", answer);
         if (CollUtil.isNotEmpty(tags)) {
             for (String tag : tags) {
                 queryWrapper.like("tags", "\"" + tag + "\"");

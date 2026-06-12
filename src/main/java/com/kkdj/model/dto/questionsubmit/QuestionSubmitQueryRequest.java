@@ -14,6 +14,11 @@ import java.io.Serializable;
 public class QuestionSubmitQueryRequest extends PageRequest implements Serializable {
 
     /**
+     * 提交记录 id
+     */
+    private Long id;
+
+    /**
      * 编程语言
      */
     private String language;

@@ -16,6 +16,7 @@ import com.kkdj.model.dto.question.JudgeConfig;
 import com.kkdj.judge.codeSandbox.model.JudgeInfo;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.entity.QuestionSubmit;
+import com.kkdj.model.enums.JudgeInfoMessageEnum;
 import com.kkdj.model.enums.QuestionSubmitStatusEnum;
 import com.kkdj.service.QuestionService;
 import com.kkdj.service.QuestionSubmitService;
@@ -55,17 +56,15 @@ public class JudgeServiceImpl implements JudgeService {
 
     @Override
     public QuestionSubmit doJudge(long questionSubmitId) {
-        System.out.println("========== doJudge 方法被调用，提交ID: " + questionSubmitId + " ==========");
+        log.debug("doJudge 方法被调用，提交ID: {}", questionSubmitId);
         // 1)传入题目的提交id，获取到对应的题目，提交信息
         QuestionSubmit questionSubmit = questionSubmitService.getById(questionSubmitId);
-        System.out.println("========== 获取到提交记录: " + questionSubmit + " ==========");
         if (questionSubmit == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "提交记录不存在");
         }
 
         Long questionId = questionSubmit.getQuestionId();
         Question question = questionService.getById(questionId);
-        System.out.println("========== 获取到题目: " + question + " ==========");
         if (question == null) {
             throw new BusinessException(ErrorCode.NOT_FOUND_ERROR, "题目不存在");
         }
@@ -106,10 +105,10 @@ public class JudgeServiceImpl implements JudgeService {
                 // 循环输入模式：合并所有输入，用换行符分隔
                 String mergedInput = String.join("\n", inputList) + "\n";
                 inputList = java.util.Collections.singletonList(mergedInput);
-                log.info("循环输入模式，合并后的输入: {}", mergedInput.replace("\n", "\\n"));
+                log.debug("循环输入模式，合并后的输入: {}", mergedInput.replace("\n", "\\n"));
             } else {
                 // 单次输入模式（默认）：逐个执行
-                log.info("单次输入模式，测试用例数: {}", inputList.size());
+                log.debug("单次输入模式，测试用例数: {}", inputList.size());
             }
 
             codeSandbox = new CodeSandboxProxy(codeSandbox);
@@ -129,13 +128,12 @@ public class JudgeServiceImpl implements JudgeService {
                         .map(String::trim)
                         .filter(s -> !s.isEmpty())
                         .collect(java.util.stream.Collectors.toList());
-                log.info("循环输入模式，分割后的输出: {}", outputList);
+                log.debug("循环输入模式，分割后的输出: {}", outputList);
             }
 
-            log.info("判题输入: {}", inputList);
-            log.info("判题输出: {}", outputList);
-            log.info("期望输出: {}", judgeCaseList.stream().map(JudgeCase::getOutput).collect(Collectors.toList()));
-            log.info("沙箱返回状态: {}, 消息: {}", excuteCodeResponse.getStatus(), excuteCodeResponse.getJudgeInfo() != null ? excuteCodeResponse.getJudgeInfo().getMessage() : "null");
+            log.debug("判题输入: {}", inputList);
+            log.debug("判题输出: {}", outputList);
+            log.debug("期望输出: {}", judgeCaseList.stream().map(JudgeCase::getOutput).collect(Collectors.toList()));
 
             // 5）根据代码沙箱执行结果，设置题目的判题状态和信息
             JudgeContext judgeContext = new JudgeContext();
@@ -145,22 +143,21 @@ public class JudgeServiceImpl implements JudgeService {
             judgeContext.setJudgeCaseList(judgeCaseList);
             judgeContext.setQuestion(question);
             judgeContext.setQuestionSubmit(questionSubmit);
-            judgeContext.setJudgeConfig(judgeConfig);  // 传递判题配置（包含 judgeMode）
+            judgeContext.setJudgeConfig(judgeConfig);
             judgeInfo = judgeManager.doJudge(judgeContext);
 
             // 6）更新判题结果信息
             questionSubmitUpdate = new QuestionSubmit();
             questionSubmitUpdate.setId(questionSubmitId);
-            // 根据判题结果设置状态：成功 为成功，其他为失败
+            // 根据判题结果设置状态
             String judgeMessage = judgeInfo.getMessage();
-            System.out.println("判题结果消息: " + judgeMessage);
-            if ("成功".equals(judgeMessage)) {
+            boolean isAccepted = JudgeInfoMessageEnum.ACCEPTED.getValue().equals(judgeMessage);
+            if (isAccepted) {
                 questionSubmitUpdate.setStatus(QuestionSubmitStatusEnum.SUCCEED.getValue());
-                System.out.println("设置状态为: 成功(2)");
             } else {
                 questionSubmitUpdate.setStatus(QuestionSubmitStatusEnum.FAILED.getValue());
-                System.out.println("设置状态为: 失败(3)");
             }
+            log.debug("判题结果: {}, 状态: {}", judgeMessage, isAccepted ? "成功" : "失败");
             questionSubmitUpdate.setJudgeInfo(JSONUtil.toJsonStr(judgeInfo));
             update = questionSubmitService.updateById(questionSubmitUpdate);
             if (!update) {
@@ -170,21 +167,14 @@ public class JudgeServiceImpl implements JudgeService {
             // 7）更新题目的提交数和通过数
             Question questionUpdate = new Question();
             questionUpdate.setId(questionId);
-            // 获取当前题目的统计数据
             Integer currentSubmitNum = question.getSubmitNum();
             Integer currentAcceptedNum = question.getAcceptedNum();
-            log.info("更新前 - 题目ID: {}, 当前提交数: {}, 当前通过数: {}", questionId, currentSubmitNum, currentAcceptedNum);
 
-            // 提交数 +1
             int newSubmitNum = currentSubmitNum == null ? 1 : currentSubmitNum + 1;
             questionUpdate.setSubmitNum(newSubmitNum);
-            // 如果判题成功，通过数 +1
-            if ("成功".equals(judgeMessage)) {
+            if (isAccepted) {
                 int newAcceptedNum = currentAcceptedNum == null ? 1 : currentAcceptedNum + 1;
                 questionUpdate.setAcceptedNum(newAcceptedNum);
-                log.info("判题成功 - 更新后: 提交数={}, 通过数={}", newSubmitNum, newAcceptedNum);
-            } else {
-                log.info("判题失败 - 更新后: 提交数={}, 通过数不变={}", newSubmitNum, currentAcceptedNum);
             }
             boolean updateQuestion = questionService.updateById(questionUpdate);
             if (!updateQuestion) {
@@ -199,7 +189,6 @@ public class JudgeServiceImpl implements JudgeService {
             questionSubmitService.updateById(questionSubmitUpdate);
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "判题失败: " + e.getMessage());
         }
-        QuestionSubmit questionSubmitResult = questionSubmitService.getById(questionSubmitId);
-        return questionSubmitResult;
+        return questionSubmitService.getById(questionSubmitId);
     }
 }
