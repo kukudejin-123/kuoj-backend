@@ -1,0 +1,14 @@
+-- 用户排行榜统计表
+CREATE TABLE IF NOT EXISTS user_ranking (
+    id BIGINT AUTO_INCREMENT COMMENT 'id' PRIMARY KEY,
+    userId BIGINT NOT NULL COMMENT '用户id',
+    totalContests INT DEFAULT 0 NOT NULL COMMENT '参赛次数',
+    totalAccepted INT DEFAULT 0 NOT NULL COMMENT '通过题目数',
+    totalSubmissions INT DEFAULT 0 NOT NULL COMMENT '总提交数',
+    rating INT DEFAULT 1500 NOT NULL COMMENT '积分',
+    createTime DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    updateTime DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL ON UPDATE CURRENT_TIMESTAMP,
+    isDelete TINYINT DEFAULT 0 NOT NULL,
+    UNIQUE KEY uk_userId (userId),
+    INDEX idx_rating (rating)
+) COMMENT '用户排行榜统计表' COLLATE = utf8mb4_unicode_ci;

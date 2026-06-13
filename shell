@@ -1,0 +1,5 @@
+构建镜像
+docker build -t oj_kkdj_backend:1.2 .
+运行容器
+docker run -d -p 8802:8802 oj_kkdj_backend:1.2
+

@@ -1,0 +1,53 @@
+package com.kkdj.model.dto.questionsubmit;
+
+import com.kkdj.common.PageRequest;
+import lombok.Data;
+import lombok.EqualsAndHashCode;
+
+import java.io.Serializable;
+
+/**
+ * 查询请求
+*/
+@Data
+@EqualsAndHashCode(callSuper = true)
+public class QuestionSubmitQueryRequest extends PageRequest implements Serializable {
+
+    /**
+     * 提交记录 id
+     */
+    private Long id;
+
+    /**
+     * 编程语言
+     */
+    private String language;
+
+    /**
+     * 提交状态
+     */
+    private String status;
+
+    /**
+     * 题目 id
+     */
+    private Long questionId;
+
+    /**
+     * 用户 id
+     */
+    private Long userId;
+
+    /**
+     * 用户名（模糊搜索）
+     */
+    private String userName;
+
+    /**
+     * 判题结果（如：成功、答案错误、超时等）
+     */
+    private String judgeResult;
+
+
+    private static final long serialVersionUID = 1L;
+}
