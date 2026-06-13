@@ -63,4 +63,14 @@ public class JudgeConfig {
      * 例如判断题：["YES", "Yes", "yes", "Y", "y"]
      */
     private List<String> acceptableOutputs;
+
+    /**
+     * SPJ 程序代码（仅 TESTLIB 模式有效）
+     */
+    private String spjCode;
+
+    /**
+     * SPJ 程序语言（仅 TESTLIB 模式有效），默认 java
+     */
+    private String spjLanguage;
 }

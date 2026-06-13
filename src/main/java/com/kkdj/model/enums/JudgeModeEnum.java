@@ -12,7 +12,8 @@ public enum JudgeModeEnum {
     IGNORE_SPACE("IGNORE_SPACE", "忽略多余空格"),
     IGNORE_CASE("IGNORE_CASE", "忽略大小写"),
     FLOAT("FLOAT", "浮点数精度比较"),
-    MULTI_ANSWER("MULTI_ANSWER", "多解判断");
+    MULTI_ANSWER("MULTI_ANSWER", "多解判断"),
+    TESTLIB("TESTLIB", "自定义SPJ判题");
 
     private final String value;
 

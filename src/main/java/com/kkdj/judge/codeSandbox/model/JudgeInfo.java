@@ -18,4 +18,8 @@ public class JudgeInfo {
      * 内存(kb)
      */
     private long memory;
+    /**
+     * 详细信息（SPJ错误信息等）
+     */
+    private String detail;
 }

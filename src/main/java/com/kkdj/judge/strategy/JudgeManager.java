@@ -1,9 +1,15 @@
 package com.kkdj.judge.strategy;
 
-import com.kkdj.judge.strategy.impl.*;
 import com.kkdj.judge.codeSandbox.model.JudgeInfo;
+import com.kkdj.judge.strategy.impl.DefaultJudgeStrategyImpl;
+import com.kkdj.judge.strategy.impl.FloatJudgeStrategyImpl;
+import com.kkdj.judge.strategy.impl.IgnoreCaseJudgeStrategyImpl;
+import com.kkdj.judge.strategy.impl.IgnoreSpaceJudgeStrategyImpl;
+import com.kkdj.judge.strategy.impl.MultiAnswerJudgeStrategyImpl;
+import com.kkdj.judge.strategy.impl.TestlibJudgeStrategyImpl;
 import com.kkdj.model.dto.question.JudgeConfig;
 import com.kkdj.model.enums.JudgeModeEnum;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
@@ -11,6 +17,9 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class JudgeManager {
+
+    @Autowired
+    private TestlibJudgeStrategyImpl testlibJudgeStrategy;
 
     /**
      * 执行判题
@@ -47,6 +56,8 @@ public class JudgeManager {
                 return new FloatJudgeStrategyImpl();
             case MULTI_ANSWER:
                 return new MultiAnswerJudgeStrategyImpl();
+            case TESTLIB:
+                return testlibJudgeStrategy;
             case DEFAULT:
             default:
                 return new DefaultJudgeStrategyImpl();

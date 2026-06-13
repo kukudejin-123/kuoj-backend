@@ -46,6 +46,24 @@ public class Question implements Serializable {
      */
     private Long contestId;
 
+    /**
+     * SPJ判题程序代码
+     */
+    @TableField("spj_code")
+    private String spjCode;
+
+    /**
+     * SPJ程序语言，默认 java
+     */
+    @TableField("spj_language")
+    private String spjLanguage;
+
+    /**
+     * SPJ是否已预编译：0-未编译，1-已编译
+     */
+    @TableField("spj_compiled")
+    private Integer spjCompiled;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }
