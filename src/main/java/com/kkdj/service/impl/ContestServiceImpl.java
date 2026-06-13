@@ -11,6 +11,7 @@ import com.kkdj.exception.ThrowUtils;
 import com.kkdj.mapper.ContestMapper;
 import com.kkdj.mapper.ContestParticipantMapper;
 import com.kkdj.mapper.ContestQuestionMapper;
+import com.kkdj.mapper.ContestSubmitMapper;
 import com.kkdj.mapper.TeamUserMapper;
 import com.kkdj.model.dto.contest.ContestAddRequest;
 import com.kkdj.model.dto.contest.ContestQueryRequest;
@@ -18,9 +19,11 @@ import com.kkdj.model.dto.contest.ContestUpdateRequest;
 import com.kkdj.model.entity.Contest;
 import com.kkdj.model.entity.ContestParticipant;
 import com.kkdj.model.entity.ContestQuestion;
+import com.kkdj.model.entity.ContestSubmit;
 import com.kkdj.model.entity.Question;
 import com.kkdj.model.entity.User;
 import com.kkdj.model.enums.ContestStatusEnum;
+import com.kkdj.model.enums.QuestionSubmitStatusEnum;
 import com.kkdj.model.vo.ContestQuestionVO;
 import com.kkdj.model.vo.ContestVO;
 import com.kkdj.model.vo.UserVO;
@@ -51,6 +54,9 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
 
     @Resource
     private ContestQuestionMapper contestQuestionMapper;
+
+    @Resource
+    private ContestSubmitMapper contestSubmitMapper;
 
     @Resource
     private ContestParticipantMapper contestParticipantMapper;
@@ -345,6 +351,25 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         Map<Long, Question> questionMap = questions.stream()
                 .collect(Collectors.toMap(Question::getId, q -> q));
 
+        // 统计比赛中每道题的提交数和通过数
+        Map<Long, int[]> contestQuestionStats = new HashMap<>();
+        for (Long questionId : questionIds) {
+            // 统计该题目在比赛中的总提交数
+            QueryWrapper<ContestSubmit> submitWrapper = new QueryWrapper<>();
+            submitWrapper.eq("contestId", contestId);
+            submitWrapper.eq("questionId", questionId);
+            int submitNum = Math.toIntExact(contestSubmitMapper.selectCount(submitWrapper));
+
+            // 统计该题目在比赛中的通过数（状态为2表示成功）
+            QueryWrapper<ContestSubmit> acceptedWrapper = new QueryWrapper<>();
+            acceptedWrapper.eq("contestId", contestId);
+            acceptedWrapper.eq("questionId", questionId);
+            acceptedWrapper.eq("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+            int acceptedNum = Math.toIntExact(contestSubmitMapper.selectCount(acceptedWrapper));
+
+            contestQuestionStats.put(questionId, new int[]{submitNum, acceptedNum});
+        }
+
         // 组装VO
         List<ContestQuestionVO> questionVOList = contestQuestions.stream().map(cq -> {
             ContestQuestionVO vo = ContestQuestionVO.objToVo(cq);
@@ -352,8 +377,15 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
             if (question != null) {
                 vo.setTitle(question.getTitle());
                 vo.setDifficulty(question.getDifficulty());
-                vo.setAcceptedNum(question.getAcceptedNum());
-                vo.setSubmitNum(question.getSubmitNum());
+            }
+            // 使用比赛中的统计数据
+            int[] stats = contestQuestionStats.get(cq.getQuestionId());
+            if (stats != null) {
+                vo.setSubmitNum(stats[0]);
+                vo.setAcceptedNum(stats[1]);
+            } else {
+                vo.setSubmitNum(0);
+                vo.setAcceptedNum(0);
             }
             return vo;
         }).collect(Collectors.toList());

@@ -7,6 +7,8 @@ import com.kkdj.model.entity.ContestQuestion;
 import com.kkdj.service.ContestQuestionService;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 /**
  * 比赛题目关联服务实现
  */
@@ -19,5 +21,13 @@ public class ContestQuestionServiceImpl extends ServiceImpl<ContestQuestionMappe
         wrapper.eq("contestId", contestId);
         wrapper.eq("questionId", questionId);
         return this.getOne(wrapper);
+    }
+
+    @Override
+    public List<ContestQuestion> getQuestionsByContestId(Long contestId) {
+        QueryWrapper<ContestQuestion> wrapper = new QueryWrapper<>();
+        wrapper.eq("contestId", contestId);
+        wrapper.orderByAsc("questionOrder");
+        return this.list(wrapper);
     }
 }

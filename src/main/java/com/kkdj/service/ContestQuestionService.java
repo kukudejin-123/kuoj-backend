@@ -12,4 +12,9 @@ public interface ContestQuestionService extends IService<ContestQuestion> {
      * 根据比赛ID和题目ID获取关联
      */
     ContestQuestion getByContestAndQuestion(Long contestId, Long questionId);
+
+    /**
+     * 获取比赛的所有题目
+     */
+    java.util.List<ContestQuestion> getQuestionsByContestId(Long contestId);
 }

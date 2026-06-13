@@ -244,8 +244,29 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         return vo;
     }
 
+    @Override
+    public long[] getUserSubmitStatistics(Long userId) {
+        if (userId == null || userId <= 0) {
+            return new long[]{0, 0};
+        }
 
+        // 查询该用户的所有提交记录
+        QueryWrapper<QuestionSubmit> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("userId", userId);
+        queryWrapper.eq("isDelete", 0);
 
+        long totalCount = this.count(queryWrapper);
+
+        // 查询通过数量 (judgeInfo 中包含 "成功")
+        QueryWrapper<QuestionSubmit> acceptWrapper = new QueryWrapper<>();
+        acceptWrapper.eq("userId", userId);
+        acceptWrapper.eq("isDelete", 0);
+        acceptWrapper.like("judgeInfo", "\"message\":\"成功\"");
+
+        long acceptCount = this.count(acceptWrapper);
+
+        return new long[]{totalCount, acceptCount};
+    }
 
 }
 

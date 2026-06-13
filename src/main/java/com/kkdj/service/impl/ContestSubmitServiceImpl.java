@@ -26,6 +26,7 @@ import com.kkdj.service.QuestionSubmitService;
 import com.kkdj.model.vo.UserVO;
 import com.kkdj.service.ContestParticipantService;
 import com.kkdj.service.ContestQuestionService;
+import com.kkdj.service.ContestRankingService;
 import com.kkdj.service.ContestService;
 import com.kkdj.service.ContestSubmitService;
 import com.kkdj.service.QuestionService;
@@ -68,6 +69,9 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
 
     @Resource
     private QuestionSubmitService questionSubmitService;
+
+    @Resource
+    private ContestRankingService contestRankingService;
 
     @Override
     public QueryWrapper<ContestSubmit> getQueryWrapper(ContestSubmitQueryRequest contestSubmitQueryRequest) {
@@ -204,14 +208,19 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
 
         // 7. 异步判题（通过创建QuestionSubmit来复用现有判题逻辑）
         Long submitId = submit.getId();
+        final Long contestIdFinal = contestId;
+        final Long questionIdFinal = questionId;
+        final Long userIdFinal = loginUser.getId();
+        final int questionOrder = contestQuestion.getQuestionOrder();
+        final Date contestStartTime = contest.getStartTime();
         CompletableFuture.runAsync(() -> {
             try {
                 // 创建QuestionSubmit记录用于判题
                 QuestionSubmit questionSubmit = new QuestionSubmit();
                 questionSubmit.setLanguage(language);
                 questionSubmit.setCode(code);
-                questionSubmit.setQuestionId(questionId);
-                questionSubmit.setUserId(loginUser.getId());
+                questionSubmit.setQuestionId(questionIdFinal);
+                questionSubmit.setUserId(userIdFinal);
                 questionSubmit.setStatus(QuestionSubmitStatusEnum.WAITING.getValue());
                 questionSubmit.setCreateTime(new Date());
                 questionSubmit.setUpdateTime(new Date());
@@ -228,6 +237,30 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
                 update.setStatus(result.getStatus());
                 update.setJudgeInfo(result.getJudgeInfo());
                 this.updateById(update);
+
+                // 更新排行榜（ACM规则）
+                boolean isAccepted = QuestionSubmitStatusEnum.SUCCEED.getValue().equals(result.getStatus());
+                if (isAccepted) {
+                    // 计算提交时间（分钟，从比赛开始计算）
+                    long submitTimeMinutes = (submit.getSubmitTime().getTime() - contestStartTime.getTime()) / (60 * 1000);
+                    // 统计该题的错误次数
+                    QueryWrapper<ContestSubmit> wrapper = new QueryWrapper<>();
+                    wrapper.eq("contestId", contestIdFinal);
+                    wrapper.eq("questionId", questionIdFinal);
+                    wrapper.eq("userId", userIdFinal);
+                    wrapper.ne("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+                    long wrongCount = ContestSubmitServiceImpl.this.count(wrapper);
+                    contestRankingService.updateRanking(contestIdFinal, userIdFinal, questionOrder, true, (int) submitTimeMinutes, (int) wrongCount);
+                } else {
+                    // 记录错误提交（不计入通过）
+                    QueryWrapper<ContestSubmit> wrapper = new QueryWrapper<>();
+                    wrapper.eq("contestId", contestIdFinal);
+                    wrapper.eq("questionId", questionIdFinal);
+                    wrapper.eq("userId", userIdFinal);
+                    wrapper.ne("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+                    long wrongCount = ContestSubmitServiceImpl.this.count(wrapper);
+                    contestRankingService.updateRanking(contestIdFinal, userIdFinal, questionOrder, false, 0, (int) wrongCount);
+                }
             } catch (Exception e) {
                 // 判题失败，更新状态
                 ContestSubmit update = new ContestSubmit();

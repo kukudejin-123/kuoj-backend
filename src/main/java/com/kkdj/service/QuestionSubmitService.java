@@ -52,5 +52,13 @@ public interface QuestionSubmitService extends IService<QuestionSubmit> {
      */
     Page<QuestionSubmitVO> getQuestionSubmitVOPage(Page<QuestionSubmit> questionSubmitPage, User loginUser);
 
+    /**
+     * 获取用户提交统计信息
+     *
+     * @param userId 用户id
+     * @return 统计数据 [提交总数, 通过数量]
+     */
+    long[] getUserSubmitStatistics(Long userId);
+
 
 }

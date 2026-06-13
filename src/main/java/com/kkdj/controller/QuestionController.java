@@ -468,4 +468,20 @@ public class QuestionController {
         return ResultUtils.success(tagList);
     }
 
+    /**
+     * 获取用户提交统计信息
+     *
+     * @param request
+     * @return 统计数据 {submitCount, acceptCount}
+     */
+    @GetMapping("/question_submit/statistics")
+    public BaseResponse<Map<String, Long>> getUserSubmitStatistics(HttpServletRequest request) {
+        User loginUser = userService.getLoginUser(request);
+        long[] statistics = questionSubmitService.getUserSubmitStatistics(loginUser.getId());
+        Map<String, Long> result = new HashMap<>();
+        result.put("submitCount", statistics[0]);
+        result.put("acceptCount", statistics[1]);
+        return ResultUtils.success(result);
+    }
+
 }
