@@ -1,6 +1,8 @@
 # OJ 系统上线部署指南
 
-> 本文档涵盖上线前的准备工作、部署步骤以及 SPJ（Special Judge）模块的改造方案。
+> 本文档涵盖从零开始在 Ubuntu 服务器上部署 OJ 系统的完整步骤。
+>
+> **服务器配置：2核4G6M Ubuntu**（单机部署，代码沙箱使用 Judge0 公共 API）
 
 ---
 
@@ -14,7 +16,8 @@
 | 前端框架 | Vue 3 | 3.2.13 |
 | 数据库 | MySQL | 8.x |
 | 缓存 | Redis | 6.x+ |
-| 代码沙箱 | Judge0 / Piston | - |
+| 反向代理 | Nginx | 1.20+ |
+| 代码沙箱 | Judge0 公共 API | - |
 | 对象存储 | 腾讯云 COS | - |
 
 ### 1.2 服务依赖
@@ -33,249 +36,273 @@
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
 ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
-│   前端静态资源    │ │   后端 API 服务   │ │   代码沙箱服务    │
-│   (Vue 3 SPA)    │ │  (Spring Boot)   │ │   (Judge0/Piston) │
-│   Port: 80/443   │ │   Port: 8802     │ │   Port: 2000     │
+│   前端静态资源    │ │   后端 API 服务   │ │   Judge0 公共API │
+│   (Vue 3 SPA)    │ │  (Spring Boot)   │ │  (远程调用判题)   │
+│   Port: 80/443   │ │   Port: 8802     │ │   ce.judge0.com  │
 └──────────────────┘ └──────────────────┘ └──────────────────┘
-              │               │               │
+              │               │
               └───────────────┼───────────────┘
                               ▼
               ┌───────────────────────────────┐
               │         基础设施服务           │
               │         MySQL │ Redis         │
+              │       (本地部署)              │
               └───────────────────────────────┘
 ```
 
+### 1.3 内存占用估算
+
+| 服务 | 内存占用 |
+|------|----------|
+| MySQL | ~500MB |
+| Redis | ~200MB |
+| Spring Boot | ~768MB |
+| Nginx | ~50MB |
+| 系统 + 其他 | ~300MB |
+| **总计** | **~1.8GB** |
+
+> 留有约 2GB 余量，适合 4G 内存服务器。
+
 ---
 
-## 二、上线前准备工作
+## 二、部署方式选择
 
-### 2.1 服务器环境准备
+### 2.1 方式对比
 
-#### 2.1.1 服务器配置建议
+| 方式 | 优点 | 缺点 | 推荐度 |
+|------|------|------|--------|
+| **宝塔面板** | 图形化管理，操作简单，一键安装环境 | 占用部分资源，需要学习面板操作 | ⭐⭐⭐⭐⭐ 推荐 |
+| 命令行部署 | 完全控制，资源占用最小 | 需要熟悉 Linux 命令，操作复杂 | ⭐⭐⭐ |
 
-| 服务 | 配置建议 | 数量 |
-|------|----------|------|
-| 应用服务器 | 4核8G | 1+ |
-| 数据库服务器 | 4核8G + SSD | 1 (主) + 1 (从) |
-| Redis 服务器 | 2核4G | 1 |
-| 代码沙箱服务器 | 4核8G | 1+ |
+### 2.2 推荐方案
 
-#### 2.1.2 软件环境
+**新手推荐使用宝塔面板**，可以大大简化部署流程。本文档以宝塔面板为主进行讲解。
 
-```bash
-# 基础环境
-- JDK 1.8+
-- Node.js 16+ / 18+
-- MySQL 8.0+
-- Redis 6.0+
-- Nginx 1.20+
+---
 
-# 代码沙箱 (二选一)
-- Docker (推荐 Judge0 或 Piston)
-- 或独立部署的沙箱服务
-```
+## 三、宝塔面板安装与配置
 
-#### 2.1.3 系统配置优化
+### 3.1 安装宝塔面板
+
+#### 步骤 1：SSH 连接服务器
+
+在本地电脑打开终端（Windows 使用 PowerShell 或 PuTTY）：
 
 ```bash
-# /etc/sysctl.conf
-# 增加文件描述符限制
-fs.file-max = 65535
-
-# TCP 连接优化
-net.ipv4.tcp_tw_reuse = 1
-net.ipv4.tcp_fin_timeout = 30
-net.core.somaxconn = 65535
-
-# 应用后生效
-sysctl -p
+ssh root@你的服务器IP
 ```
+
+输入密码登录。
+
+#### 步骤 2：安装宝塔面板
+
+**Ubuntu/Debian 系统：**
 
 ```bash
-# /etc/security/limits.conf
-* soft nofile 65535
-* hard nofile 65535
+wget -O install.sh http://download.bt.cn/install/install-ubuntu_6.0.sh && sudo bash install.sh ed8484bec1
 ```
 
-### 2.2 安全准备
+安装过程会提示确认，输入 `y` 回车继续。
 
-#### 2.2.1 敏感信息处理
+安装完成后会显示：
+```
+==================================================================
+Congratulations! Installed successfully!
+==================================================================
+外网面板地址: https://xxx.xxx.xxx.xxx:8888/xxxxxxxx
+内网面板地址: https://192.168.x.x:8888/xxxxxxxx
+username: xxxxxxxx
+password: xxxxxxxx
+==================================================================
+```
 
-**必须修改的配置项：**
+**⚠️ 重要：请保存好上面的面板地址、用户名和密码！**
 
-| 文件 | 配置项 | 说明 |
-|------|--------|------|
-| application-prod.yml | datasource.password | 数据库密码 |
-| application-prod.yml | redis.password | Redis 密码 |
-| application.yml | cos.client.accessKey | COS 密钥 |
-| application.yml | cos.client.secretKey | COS 密钥 |
-| application.yml | wx.* | 微信相关配置 |
+#### 步骤 3：开放宝塔端口
 
-**建议做法：**
-1. 使用环境变量注入敏感配置
-2. 或使用配置中心（如 Nacos、Apollo）
-3. 生产配置文件不要提交到代码仓库
+如果云服务商有安全组，需要开放以下端口：
+- **8888**：宝塔面板端口
+- **80**：HTTP
+- **443**：HTTPS
+- **22**：SSH
 
-#### 2.2.2 网络安全
+在云服务器控制台（阿里云/腾讯云/华为云等）的安全组中添加这些端口规则。
+
+#### 步骤 4：登录宝塔面板
+
+1. 浏览器访问面板地址（如 `https://xxx.xxx.xxx.xxx:8888/xxxxxxxx`）
+2. 输入用户名和密码登录
+3. 首次登录会提示绑定宝塔账号，可以跳过或注册绑定
+
+#### 步骤 5：一键安装环境
+
+登录后，面板会推荐安装环境，选择以下组件：
+
+| 组件 | 版本 | 说明 |
+|------|------|------|
+| Nginx | 1.22+ | 必装 |
+| MySQL | 8.0 | 必装 |
+| Redis | 6.0+ | 必装 |
+| Tomcat | 不装 | 不需要 |
+| PHP | 不装 | 不需要 |
+| phpMyAdmin | 可选 | 数据库管理工具 |
+
+点击"一键安装"，等待安装完成（约 10-20 分钟）。
+
+### 3.2 宝塔面板基础设置
+
+#### 3.2.1 修改面板端口（安全建议）
+
+1. 面板设置 → 面板端口 → 改为其他端口（如 18888）
+2. 记得在安全组开放新端口
+
+#### 3.2.2 安装 Java 环境
+
+宝塔面板默认不包含 Java，需要手动安装：
+
+**方法一：通过软件商店安装**
+1. 软件商店 → 搜索 "Java项目管理器" → 安装
+2. 或者搜索 "JDK" 安装
+
+**方法二：命令行安装（推荐）**
+
+在宝塔面板的"终端"中执行：
 
 ```bash
-# 防火墙配置 (仅开放必要端口)
-# 对外开放
-- 80/443 (Web 服务)
-- 22 (SSH，建议限制 IP)
+# 安装 OpenJDK 8
+apt update
+apt install openjdk-8-jdk -y
 
-# 内部开放
-- 3306 (MySQL，仅应用服务器可访问)
-- 6379 (Redis，仅应用服务器可访问)
-- 8802 (后端 API，仅 Nginx 可访问)
+# 验证安装
+java -version
+javac -version
 ```
 
-### 2.3 数据库准备
+显示版本信息即安装成功。
 
-#### 2.3.1 数据库初始化
+#### 3.2.3 配置 MySQL
+
+1. 数据库 → 添加数据库
+2. 填写信息：
+   - 数据库名：`oj`
+   - 用户名：`oj_user`
+   - 密码：自己设置一个强密码
+   - 访问权限：本地服务器
+
+3. 点击提交创建
+
+或者用命令行：
+```bash
+mysql -u root -p
+```
 
 ```sql
--- 1. 创建数据库
 CREATE DATABASE oj DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
--- 2. 创建用户
-CREATE USER 'oj_user'@'%' IDENTIFIED BY '强密码';
-
--- 3. 授权
-GRANT ALL PRIVILEGES ON oj.* TO 'oj_user'@'%';
+CREATE USER 'oj_user'@'localhost' IDENTIFIED BY '你的密码';
+GRANT ALL PRIVILEGES ON oj.* TO 'oj_user'@'localhost';
 FLUSH PRIVILEGES;
+EXIT;
 ```
 
-#### 2.3.2 执行 SQL 脚本
+#### 3.2.4 配置 Redis
 
-按顺序执行 `oj_backend-master/sql/` 目录下的脚本：
-1. 建表脚本
-2. 初始数据脚本
-3. spj_test_questions.sql (SPJ 测试题目)
+1. 软件商店 → 已安装 → Redis → 设置
+2. 修改配置：
+   - 设置密码：点击"密码"设置一个密码
+   - 最大内存：设置为 200MB
+   - 最大内存策略：allkeys-lru
 
-#### 2.3.3 数据库优化配置
+或在终端执行：
+```bash
+# 编辑 Redis 配置
+vim /etc/redis/redis.conf
 
-```ini
-# /etc/my.cnf
-[mysqld]
-# InnoDB 配置
-innodb_buffer_pool_size = 2G  # 物理内存的 50-70%
-innodb_log_file_size = 256M
-innodb_flush_log_at_trx_commit = 2
+# 找到并修改以下配置
+# requirepass 你的密码
+# maxmemory 200mb
+# maxmemory-policy allkeys-lru
 
-# 连接配置
-max_connections = 500
-wait_timeout = 600
-
-# 慢查询日志
-slow_query_log = 1
-long_query_time = 2
+# 重启 Redis
+systemctl restart redis
 ```
+
+#### 3.2.5 安全组设置
+
+在面板"安全"页面，确保以下端口已开放：
+
+| 端口 | 说明 |
+|------|------|
+| 8888/18888 | 宝塔面板 |
+| 80 | HTTP |
+| 443 | HTTPS |
+| 22 | SSH |
+
+**不需要开放的端口（内部使用）：**
+- 3306（MySQL）
+- 6379（Redis）
+- 8802（后端 API）
 
 ---
 
-## 三、部署步骤
+## 四、项目打包与上传
 
-### 3.1 后端部署
+### 4.1 本地打包项目
 
-#### 3.1.1 配置修改
+#### 4.1.1 后端打包
 
-```yaml
-# application-prod.yml 关键配置
-server:
-  port: 8802
-
-spring:
-  datasource:
-    url: jdbc:mysql://数据库IP:3306/oj?useSSL=true&serverTimezone=Asia/Shanghai
-    username: oj_user
-    password: ${DB_PASSWORD}  # 使用环境变量
-
-  redis:
-    host: Redis服务器IP
-    password: ${REDIS_PASSWORD}
-
-# 代码沙箱配置
-codesandbox:
-  type: piston  # 生产环境推荐 Piston
-  piston-url: http://沙箱服务器IP:2000/api/v2/piston/execute
-```
-
-#### 3.1.2 打包构建
+在你的开发电脑上：
 
 ```bash
 # 进入后端目录
 cd oj_backend-master
 
-# Maven 打包 (跳过测试)
+# 修改生产配置
+# 编辑 src/main/resources/application-prod.yml
+```
+
+**application-prod.yml 配置示例：**
+
+```yaml
+server:
+  port: 8802
+
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: oj_user
+    password: 你的数据库密码
+
+  redis:
+    host: localhost
+    port: 6379
+    password: 你的Redis密码
+    database: 1
+    timeout: 5000
+
+mybatis-plus:
+  configuration:
+    log-impl: ''
+
+# 代码沙箱配置
+codesandbox:
+  type: judge0
+  judge0-url: https://ce.judge0.com/submissions
+
+logging:
+  level:
+    com.kkdj: info
+```
+
+```bash
+# Maven 打包
 mvn clean package -DskipTests
 
-# 输出文件
+# 打包完成后，jar 包位置：
 # target/oj_kkdj_backend-0.0.1-SNAPSHOT.jar
 ```
 
-#### 3.1.3 启动服务
-
-```bash
-# 方式一：直接启动
-java -jar oj_kkdj_backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
-
-# 方式二：Systemd 服务 (推荐)
-# /etc/systemd/system/oj-backend.service
-[Unit]
-Description=OJ Backend Service
-After=network.target mysql.service redis.service
-
-[Service]
-Type=simple
-User=oj
-WorkingDirectory=/opt/oj/backend
-ExecStart=/usr/bin/java -Xms512m -Xmx2g -jar oj_kkdj_backend-0.0.1-SNAPSHOT.jar --spring.profiles.active=prod
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-
-# 启动服务
-systemctl daemon-reload
-systemctl enable oj-backend
-systemctl start oj-backend
-```
-
-#### 3.1.4 健康检查
-
-```bash
-# 检查服务状态
-curl http://localhost:8802/api/actuator/health
-
-# 检查 API 文档
-curl http://localhost:8802/api/doc.html
-```
-
-### 3.2 前端部署
-
-#### 3.2.1 配置修改
-
-```javascript
-// vue.config.js
-module.exports = {
-  productionSourceMap: false,  // 关闭 sourcemap
-
-  // API 代理 (开发环境)
-  devServer: {
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8802',
-        changeOrigin: true
-      }
-    }
-  }
-}
-```
-
-#### 3.2.2 构建打包
+#### 4.1.2 前端打包
 
 ```bash
 # 进入前端目录
@@ -287,685 +314,571 @@ npm install
 # 生产环境构建
 npm run build
 
-# 输出目录：dist/
+# 打包完成后，静态文件位置：
+# dist/
 ```
 
-#### 3.2.3 Nginx 配置
+#### 4.1.3 准备 SQL 脚本
+
+需要上传的 SQL 文件（在 `sql/` 目录下）：
+- `create_table.sql`
+- `contest_tables.sql`
+- `team_tables.sql`
+- `sample_questions.sql`
+- `acm_questions.sql`（新增的 ACM 题目）
+
+### 4.2 上传文件到服务器
+
+#### 方法一：宝塔面板上传（推荐新手）
+
+1. 宝塔面板 → 文件
+2. 创建目录：`/www/wwwroot/oj/`
+3. 在目录下创建：
+   - `backend/` - 存放后端 jar 包
+   - `frontend/` - 存放前端 dist
+   - `sql/` - 存放 SQL 脚本
+4. 进入对应目录，点击"上传"按钮上传文件
+
+#### 方法二：SFTP 上传（推荐）
+
+使用 FileZilla 或 WinSCP：
+
+1. 连接信息：
+   - 主机：你的服务器 IP
+   - 端口：22
+   - 用户名：root
+   - 密码：服务器密码
+
+2. 上传文件：
+   - 后端 jar 包 → `/www/wwwroot/oj/backend/`
+   - 前端 dist 目录内容 → `/www/wwwroot/oj/frontend/`
+   - SQL 脚本 → `/www/wwwroot/oj/sql/`
+
+#### 方法三：命令行上传
+
+在本地终端执行：
+
+```bash
+# 上传后端 jar 包
+scp target/oj_kkdj_backend-0.0.1-SNAPSHOT.jar root@服务器IP:/www/wwwroot/oj/backend/
+
+# 上传前端 dist
+scp -r dist/* root@服务器IP:/www/wwwroot/oj/frontend/
+
+# 上传 SQL 脚本
+scp sql/*.sql root@服务器IP:/www/wwwroot/oj/sql/
+```
+
+### 4.3 导入数据库
+
+#### 方法一：宝塔面板导入
+
+1. 宝塔面板 → 数据库 → 找到 oj 数据库 → 管理
+2. 点击"导入"按钮
+3. 按顺序选择并导入 SQL 文件：
+   - `create_table.sql`
+   - `contest_tables.sql`
+   - `team_tables.sql`
+   - `sample_questions.sql`
+   - `acm_questions.sql`
+
+#### 方法二：命令行导入
+
+```bash
+# SSH 登录服务器后
+cd /www/wwwroot/oj/sql
+
+# 导入 SQL 文件（按顺序）
+mysql -u oj_user -p oj < create_table.sql
+mysql -u oj_user -p oj < contest_tables.sql
+mysql -u oj_user -p oj < team_tables.sql
+mysql -u oj_user -p oj < sample_questions.sql
+mysql -u oj_user -p oj < acm_questions.sql
+
+# 验证导入
+mysql -u oj_user -p oj -e "SHOW TABLES;"
+```
+
+---
+
+## 五、启动后端服务
+
+### 5.1 创建启动脚本
+
+在宝塔面板的终端或通过 SSH：
+
+```bash
+# 创建启动脚本
+cat > /www/wwwroot/oj/backend/start.sh << 'EOF'
+#!/bin/bash
+cd /www/wwwroot/oj/backend
+nohup java \
+  -Xms256m \
+  -Xmx768m \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=200 \
+  -Dspring.profiles.active=prod \
+  -jar oj_kkdj_backend-0.0.1-SNAPSHOT.jar \
+  > logs/app.log 2>&1 &
+echo $! > app.pid
+echo "服务启动中，PID: $(cat app.pid)"
+EOF
+
+chmod +x /www/wwwroot/oj/backend/start.sh
+
+# 创建日志目录
+mkdir -p /www/wwwroot/oj/backend/logs
+```
+
+### 5.2 创建停止脚本
+
+```bash
+cat > /www/wwwroot/oj/backend/stop.sh << 'EOF'
+#!/bin/bash
+cd /www/wwwroot/oj/backend
+if [ -f app.pid ]; then
+    PID=$(cat app.pid)
+    kill $PID 2>/dev/null
+    echo "服务已停止，PID: $PID"
+    rm app.pid
+else
+    echo "未找到 PID 文件"
+fi
+EOF
+
+chmod +x /www/wwwroot/oj/backend/stop.sh
+```
+
+### 5.3 创建重启脚本
+
+```bash
+cat > /www/wwwroot/oj/backend/restart.sh << 'EOF'
+#!/bin/bash
+cd /www/wwwroot/oj/backend
+./stop.sh
+sleep 3
+./start.sh
+EOF
+
+chmod +x /www/wwwroot/oj/backend/restart.sh
+```
+
+### 5.4 启动服务
+
+```bash
+# 启动
+cd /www/wwwroot/oj/backend
+./start.sh
+
+# 查看日志
+tail -f logs/app.log
+
+# 测试服务
+curl http://localhost:8802/api/doc.html
+```
+
+### 5.5 配置开机自启动（可选）
+
+使用 systemd 管理服务：
+
+```bash
+# 创建服务文件
+cat > /etc/systemd/system/oj-backend.service << 'EOF'
+[Unit]
+Description=OJ Backend Service
+After=network.target mysql.service redis.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/www/wwwroot/oj/backend
+ExecStart=/usr/bin/java \
+  -Xms256m \
+  -Xmx768m \
+  -XX:+UseG1GC \
+  -XX:MaxGCPauseMillis=200 \
+  -Dspring.profiles.active=prod \
+  -jar oj_kkdj_backend-0.0.1-SNAPSHOT.jar
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# 启用并启动服务
+systemctl daemon-reload
+systemctl enable oj-backend
+systemctl start oj-backend
+
+# 查看状态
+systemctl status oj-backend
+```
+
+---
+
+## 六、配置 Nginx
+
+### 6.1 宝塔面板配置站点
+
+1. 宝塔面板 → 网站 → 添加站点
+2. 填写信息：
+   - 域名：你的域名（没有域名就填服务器 IP）
+   - 根目录：`/www/wwwroot/oj/frontend`
+   - PHP版本：纯静态
+   - 创建数据库：不创建（已创建）
+
+3. 点击提交
+
+### 6.2 配置反向代理
+
+1. 点击刚创建的站点 → 设置
+2. 点击"反向代理" → "添加反向代理"
+3. 填写：
+   - 代理名称：oj-api
+   - 目标URL：`http://127.0.0.1:8802`
+   - 发送域名：`$host`
+   - 代理目录：`/api`
+
+或者手动修改配置：
+
+1. 点击"配置文件"
+2. 在 `server` 块内添加：
 
 ```nginx
-# /etc/nginx/conf.d/oj.conf
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    # 强制 HTTPS
-    return 301 https://$server_name$request_uri;
+# API 反向代理
+location /api/ {
+    proxy_pass http://127.0.0.1:8802/api/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    
+    # 超时配置（判题可能较慢）
+    proxy_connect_timeout 60s;
+    proxy_read_timeout 120s;
+    proxy_send_timeout 120s;
 }
 
+# Vue Router History 模式支持
+location / {
+    try_files $uri $uri/ /index.html;
+}
+
+# 静态资源缓存
+location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+    expires 7d;
+    add_header Cache-Control "public";
+}
+
+# Gzip 压缩
+gzip on;
+gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+gzip_min_length 1024;
+```
+
+### 6.3 完整 Nginx 配置示例
+
+```nginx
 server {
-    listen 443 ssl http2;
-    server_name your-domain.com;
-
-    # SSL 配置
-    ssl_certificate /etc/nginx/ssl/your-domain.com.crt;
-    ssl_certificate_key /etc/nginx/ssl/your-domain.com.key;
-
-    # 前端静态资源
-    root /opt/oj/frontend/dist;
+    listen 80;
+    server_name your-domain.com;  # 改成你的域名或 IP
+    
+    root /www/wwwroot/oj/frontend;
     index index.html;
 
-    # 前端路由 (Vue Router History 模式)
-    location / {
-        try_files $uri $uri/ /index.html;
-    }
+    # Gzip 压缩
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+    gzip_min_length 1024;
 
-    # API 代理
+    # API 反向代理
     location /api/ {
         proxy_pass http://127.0.0.1:8802/api/;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-
-        # 超时配置
+        
         proxy_connect_timeout 60s;
         proxy_read_timeout 120s;
         proxy_send_timeout 120s;
     }
 
+    # Vue Router History 模式
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
     # 静态资源缓存
     location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
-        expires 1y;
-        add_header Cache-Control "public, immutable";
+        expires 7d;
+        add_header Cache-Control "public";
     }
-
-    # Gzip 压缩
-    gzip on;
-    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
-    gzip_min_length 1024;
 }
 ```
 
-### 3.3 代码沙箱部署
-
-#### 3.3.1 方案一：Judge0 (推荐)
+保存后，重载 Nginx：
 
 ```bash
-# 使用 Docker 部署
-git clone https://github.com/judge0/judge0.git
-cd judge0
-
-# 配置
-# 修改 judge0.conf 中的配置
-
-# 启动
-docker-compose up -d
-
-# 服务地址
-# http://localhost:2358
+nginx -t          # 测试配置
+nginx -s reload   # 重载配置
 ```
 
-#### 3.3.2 方案二：Piston
+或在宝塔面板中点击"重载配置"。
+
+### 6.4 配置 HTTPS（可选）
+
+如果有 SSL 证书：
+
+1. 宝塔面板 → 网站 → 点击站点 → SSL
+2. 选择"其他证书"
+3. 粘贴证书内容（.pem/.crt）和私钥内容（.key）
+4. 保存并启用
+
+---
+
+## 七、验证部署
+
+### 7.1 检查服务状态
 
 ```bash
-# Docker 部署
-docker run -d \
-  --name piston \
-  -p 2000:2000 \
-  --restart always \
-  ghcr.io/engineer-man/piston
+# 检查后端
+systemctl status oj-backend
+# 或
+ps aux | grep java
 
-# 服务地址
-# http://localhost:2000/api/v2/piston/execute
+# 检查 Nginx
+systemctl status nginx
+
+# 检查 MySQL
+systemctl status mysql
+
+# 检查 Redis
+systemctl status redis
 ```
 
-### 3.4 Redis 部署
+### 7.2 检查端口
 
 ```bash
-# 方式一：直接安装
-yum install redis
+# 查看端口占用
+netstat -tlnp | grep -E '80|8802|3306|6379'
+```
 
-# /etc/redis.conf
-bind 127.0.0.1
-requirepass 强密码
-maxmemory 2gb
-maxmemory-policy allkeys-lru
+应该看到：
+- 80：nginx
+- 8802：java
+- 3306：mysql
+- 6379：redis
 
-# 启动
-systemctl enable redis
-systemctl start redis
+### 7.3 访问测试
 
-# 方式二：Docker
-docker run -d \
-  --name redis \
-  -p 6379:6379 \
-  -v /opt/redis/data:/data \
-  redis:7-alpine \
-  redis-server --requirepass 强密码 --appendonly yes
+在浏览器中访问：
+
+1. **前端页面**：`http://你的域名或IP/`
+   - 应该能看到 OJ 系统首页
+
+2. **API 文档**：`http://你的域名或IP/api/doc.html`
+   - 应该能看到 Swagger 文档
+
+3. **注册登录**：尝试注册一个用户
+
+4. **提交代码**：尝试提交一道题目的代码，测试判题功能
+
+---
+
+## 八、常见问题排查
+
+### Q1: 访问前端页面 502 错误？
+
+**原因**：后端服务未启动或端口不对
+
+**解决**：
+```bash
+# 检查后端服务
+systemctl status oj-backend
+# 或查看日志
+tail -f /www/wwwroot/oj/backend/logs/app.log
+```
+
+### Q2: 访问前端页面空白？
+
+**原因**：前端路由配置问题或静态文件路径错误
+
+**解决**：
+1. 检查 Nginx 配置中的 `root` 路径是否正确
+2. 检查 `try_files` 配置是否正确
+3. 检查前端 `dist` 文件是否完整上传
+
+### Q3: 判题一直等待？
+
+**原因**：Judge0 API 无法访问
+
+**解决**：
+```bash
+# 测试 Judge0 API
+curl https://ce.judge0.com/submissions
+
+# 如果无法访问，检查服务器是否能访问外网
+ping google.com
+```
+
+### Q4: 数据库连接失败？
+
+**原因**：数据库配置错误或密码不对
+
+**解决**：
+```bash
+# 测试数据库连接
+mysql -u oj_user -p
+
+# 检查配置文件中的数据库密码
+cat /www/wwwroot/oj/backend/application-prod.yml
+```
+
+### Q5: Redis 连接失败？
+
+**原因**：Redis 密码未配置或配置错误
+
+**解决**：
+```bash
+# 测试 Redis 连接
+redis-cli -a 你的密码 ping
+
+# 检查配置
+cat /etc/redis/redis.conf | grep requirepass
+```
+
+### Q6: 内存不足？
+
+**原因**：4G 内存可能不够用
+
+**解决**：
+```bash
+# 查看内存使用
+free -h
+
+# 减少 JVM 内存
+# 修改启动脚本中的 -Xmx 参数
+# 如：-Xmx512m
+
+# 重启服务
+systemctl restart oj-backend
 ```
 
 ---
 
-## 四、SPJ 模块服务器部署改造方案
+## 九、日常运维
 
-### 4.1 当前问题分析
-
-当前 SPJ 模块 (`JavaSpjExecutor.java`) 存在以下问题：
-
-| 问题 | 影响 | 风险等级 |
-|------|------|----------|
-| 使用本地临时目录 `/tmp/oj_spj/` | 多实例部署时缓存不共享 | 中 |
-| 直接调用 `javac` 和 `java` 命令 | 依赖服务器 JDK 环境 | 低 |
-| 无资源隔离 | SPJ 程序可能占用过多资源 | 高 |
-| 无安全沙箱 | 恶意 SPJ 代码可能危害系统 | 高 |
-| 同步执行 | 高并发时性能瓶颈 | 中 |
-
-### 4.2 改造方案概述
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     改造前架构                                   │
-│  ┌─────────────┐      ┌─────────────────┐      ┌──────────────┐ │
-│  │  后端服务   │ ───▶ │ JavaSpjExecutor │ ───▶ │ 本地执行 SPJ │ │
-│  └─────────────┘      └─────────────────┘      └──────────────┘ │
-│                              │                                  │
-│                              ▼                                  │
-│                       /tmp/oj_spj/                              │
-│                       (本地文件系统)                             │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────────────┐
-│                     改造后架构                                   │
-│  ┌─────────────┐      ┌─────────────────┐      ┌──────────────┐ │
-│  │  后端服务   │ ───▶ │ RemoteSpjExec   │ ───▶ │  SPJ 沙箱    │ │
-│  └─────────────┘      └─────────────────┘      │   服务       │ │
-│                              │                 └──────────────┘ │
-│                              ▼                        │         │
-│                       Redis 缓存              Docker 容器       │
-│                       (分布式缓存)           (资源隔离)         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 4.3 详细改造方案
-
-#### 4.3.1 方案一：Docker 容器化执行（推荐）
-
-**架构设计：**
-
-```
-后端服务 ──HTTP──▶ SPJ 执行服务 ──Docker API──▶ SPJ 容器
-                                                    │
-                                                    ▼
-                                             资源限制 + 超时控制
-```
-
-**实现步骤：**
-
-**步骤 1：创建 SPJ 执行服务**
-
-新建独立服务或扩展现有代码沙箱服务：
-
-```java
-// 新建 RemoteSpjExecutor.java
-package com.kkdj.judge.spj;
-
-import cn.hutool.http.HttpUtil;
-import cn.hutool.json.JSONObject;
-import cn.hutool.json.JSONUtil;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
-
-/**
- * 远程 SPJ 执行器
- * 通过 HTTP 调用独立的 SPJ 执行服务
- */
-@Slf4j
-@Component
-public class RemoteSpjExecutor implements SpjExecutor {
-
-    @Value("${spj.service.url:http://localhost:8091}")
-    private String spjServiceUrl;
-
-    @Value("${spj.service.timeout:30}")
-    private int defaultTimeout;
-
-    @Override
-    public CompileResult compile(String spjCode, Long questionId) {
-        try {
-            JSONObject request = new JSONObject();
-            request.set("spjCode", spjCode);
-            request.set("questionId", questionId);
-
-            String response = HttpUtil.post(
-                spjServiceUrl + "/spj/compile",
-                request.toString()
-            );
-
-            JSONObject result = JSONUtil.parseObj(response);
-            return new CompileResult(
-                result.getBool("success", false),
-                result.getInt("exitCode", -1),
-                result.getStr("message", ""),
-                result.getLong("compileTime", 0L)
-            );
-        } catch (Exception e) {
-            log.error("远程 SPJ 编译失败", e);
-            return new CompileResult(false, -1, "远程编译失败: " + e.getMessage(), 0L);
-        }
-    }
-
-    @Override
-    public boolean isCompiled(Long questionId) {
-        try {
-            String response = HttpUtil.get(
-                spjServiceUrl + "/spj/compiled?questionId=" + questionId
-            );
-            JSONObject result = JSONUtil.parseObj(response);
-            return result.getBool("compiled", false);
-        } catch (Exception e) {
-            log.error("检查 SPJ 编译状态失败", e);
-            return false;
-        }
-    }
-
-    @Override
-    public SpjResult execute(Long questionId, String inputFile,
-                             String userOutputFile, String answerFile, int timeout) {
-        try {
-            JSONObject request = new JSONObject();
-            request.set("questionId", questionId);
-            request.set("inputFile", inputFile);
-            request.set("userOutputFile", userOutputFile);
-            request.set("answerFile", answerFile);
-            request.set("timeout", timeout > 0 ? timeout : defaultTimeout);
-
-            String response = HttpUtil.post(
-                spjServiceUrl + "/spj/execute",
-                request.toString()
-            );
-
-            JSONObject result = JSONUtil.parseObj(response);
-            return new SpjResult(
-                result.getInt("exitCode", -1),
-                result.getStr("output", ""),
-                result.getLong("executeTime", 0L),
-                result.getBool("timeout", false)
-            );
-        } catch (Exception e) {
-            log.error("远程 SPJ 执行失败", e);
-            return SpjResult.systemError("远程执行失败: " + e.getMessage());
-        }
-    }
-
-    @Override
-    public void cleanup(Long questionId) {
-        try {
-            HttpUtil.delete(spjServiceUrl + "/spj/cache?questionId=" + questionId);
-        } catch (Exception e) {
-            log.error("清理 SPJ 缓存失败", e);
-        }
-    }
-}
-```
-
-**步骤 2：创建 SPJ 执行服务端**
-
-独立 Spring Boot 服务，通过 Docker API 执行 SPJ：
-
-```java
-// SpjDockerExecutor.java - SPJ Docker 执行器
-package com.kkdj.spj.service;
-
-import com.github.dockerjava.api.DockerClient;
-import com.github.dockerjava.api.command.CreateContainerResponse;
-import com.github.dockerjava.api.model.*;
-import com.github.dockerjava.core.DefaultDockerClientConfig;
-import com.github.dockerjava.core.DockerClientBuilder;
-import com.github.dockerjava.core.DockerClientConfig;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.io.File;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.concurrent.TimeUnit;
-
-@Slf4j
-@Service
-public class SpjDockerExecutor {
-
-    private final DockerClient dockerClient;
-    private static final String SPJ_IMAGE = "openjdk:8-jdk-alpine";
-    private static final long MEMORY_LIMIT = 256 * 1024 * 1024L; // 256MB
-    private static final long CPU_QUOTA = 50000L; // 0.5 CPU
-
-    public SpjDockerExecutor() {
-        DockerClientConfig config = DefaultDockerClientConfig.createDefaultConfigBuilder()
-                .build();
-        this.dockerClient = DockerClientBuilder.getInstance(config).build();
-    }
-
-    /**
-     * 在 Docker 容器中执行 SPJ
-     */
-    public SpjExecutionResult executeInDocker(Long questionId,
-                                               String inputPath,
-                                               String userOutputPath,
-                                               String answerPath,
-                                               int timeout) {
-        String containerId = null;
-        try {
-            // 1. 创建容器
-            HostConfig hostConfig = HostConfig.newHostConfig()
-                    .withMemory(MEMORY_LIMIT)
-                    .withCpuQuota(CPU_QUOTA)
-                    .withBinds(
-                        new Bind(getSpjWorkDir(questionId).toString(),
-                                 new Volume("/spj")),
-                        new Bind(inputPath, new Volume("/input.txt")),
-                        new Bind(userOutputPath, new Volume("/userOutput.txt")),
-                        new Bind(answerPath, new Volume("/answer.txt"))
-                    )
-                    .withNetworkMode("none"); // 禁用网络
-
-            CreateContainerResponse container = dockerClient.createContainerCmd(SPJ_IMAGE)
-                    .withHostConfig(hostConfig)
-                    .withCmd("java", "-Xmx200m", "SpjChecker",
-                             "/input.txt", "/userOutput.txt", "/answer.txt")
-                    .withWorkingDir("/spj")
-                    .exec();
-
-            containerId = container.getId();
-
-            // 2. 启动容器
-            dockerClient.startContainerCmd(containerId).exec();
-
-            // 3. 等待执行完成
-            long startTime = System.currentTimeMillis();
-            boolean finished = dockerClient.waitContainerCmd(containerId)
-                    .start().awaitCompletion(timeout, TimeUnit.SECONDS);
-            long executeTime = System.currentTimeMillis() - startTime;
-
-            if (!finished) {
-                dockerClient.stopContainerCmd(containerId).withTimeout(5).exec();
-                return SpjExecutionResult.timeout();
-            }
-
-            // 4. 获取退出码
-            Long exitCode = dockerClient.inspectContainerCmd(containerId)
-                    .exec().getState().getExitCodeLong();
-
-            // 5. 获取输出
-            String output = readContainerLogs(containerId);
-
-            return new SpjExecutionResult(exitCode.intValue(), output, executeTime, false);
-
-        } catch (Exception e) {
-            log.error("Docker 执行 SPJ 失败", e);
-            return SpjExecutionResult.systemError("执行失败: " + e.getMessage());
-        } finally {
-            // 清理容器
-            if (containerId != null) {
-                try {
-                    dockerClient.removeContainerCmd(containerId).withForce(true).exec();
-                } catch (Exception ignored) {}
-            }
-        }
-    }
-
-    private Path getSpjWorkDir(Long questionId) {
-        return Path.of("/opt/spj/cache", questionId.toString());
-    }
-
-    private String readContainerLogs(String containerId) throws Exception {
-        StringBuilder logs = new StringBuilder();
-        dockerClient.logContainerCmd(containerId)
-                .withStdOut(true)
-                .withStdErr(true)
-                .exec(new LogContainerResultCallback() {
-                    @Override
-                    public void onNext(Frame frame) {
-                        logs.append(new String(frame.getPayload()));
-                    }
-                }).awaitCompletion();
-        return logs.toString();
-    }
-}
-```
-
-**步骤 3：添加 Maven 依赖**
-
-```xml
-<!-- pom.xml -->
-<dependency>
-    <groupId>com.github.docker-java</groupId>
-    <artifactId>docker-java-core</artifactId>
-    <version>3.3.0</version>
-</dependency>
-<dependency>
-    <groupId>com.github.docker-java</groupId>
-    <artifactId>docker-java-transport-httpclient5</artifactId>
-    <version>3.3.0</version>
-</dependency>
-```
-
-**步骤 4：配置切换**
-
-```yaml
-# application.yml
-spj:
-  mode: remote  # local 或 remote
-  service:
-    url: http://spj-service:8091
-    timeout: 30
-  docker:
-    enabled: true
-    image: openjdk:8-jdk-alpine
-    memory: 256m
-```
-
-#### 4.3.2 方案二：进程池 + 资源限制
-
-如果不想引入 Docker，可以使用进程池 + cgroups 限制：
-
-```java
-// ProcessPoolSpjExecutor.java
-@Slf4j
-@Component
-public class ProcessPoolSpjExecutor implements SpjExecutor {
-
-    private final ExecutorService processPool;
-
-    public ProcessPoolSpjExecutor() {
-        // 限制并发执行的 SPJ 数量
-        this.processPool = Executors.newFixedThreadPool(4);
-    }
-
-    @Override
-    public SpjResult execute(Long questionId, String inputFile,
-                             String userOutputFile, String answerFile, int timeout) {
-        Future<SpjResult> future = processPool.submit(() -> {
-            ProcessBuilder pb = new ProcessBuilder(
-                "java",
-                "-Xmx256m",           // 堆内存限制
-                "-Xss256k",           // 栈大小限制
-                "-XX:MaxDirectMemorySize=64m",  // 直接内存限制
-                "SpjChecker",
-                inputFile, userOutputFile, answerFile
-            );
-
-            // 设置工作目录和环境
-            pb.directory(new File(getWorkDir(questionId)));
-            pb.redirectErrorStream(true);
-
-            Process process = pb.start();
-
-            // 使用 cgroups 限制 (需要在系统层面配置)
-            // 或者使用 ulimit
-
-            boolean finished = process.waitFor(timeout, TimeUnit.SECONDS);
-            if (!finished) {
-                process.destroyForcibly();
-                return SpjResult.timeout();
-            }
-
-            return new SpjResult(process.exitValue(), readOutput(process), 0, false);
-        });
-
-        try {
-            return future.get(timeout + 5, TimeUnit.SECONDS);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            return SpjResult.timeout();
-        } catch (Exception e) {
-            return SpjResult.systemError(e.getMessage());
-        }
-    }
-}
-```
-
-#### 4.3.3 方案三：集成到现有代码沙箱
-
-将 SPJ 执行集成到 Judge0 或 Piston：
-
-```java
-// 将 SPJ 代码作为普通程序提交到 Judge0 执行
-// 需要修改 TestlibJudgeStrategyImpl
-
-public class SandboxIntegratedSpjExecutor implements SpjExecutor {
-
-    @Resource
-    private CodeSandbox codeSandbox;  // 复用现有沙箱
-
-    @Override
-    public SpjResult execute(Long questionId, String inputFile,
-                             String userOutputFile, String answerFile, int timeout) {
-        // 构建 SPJ 执行请求
-        ExecuteCodeRequest request = new ExecuteCodeRequest();
-        request.setLanguage("java");
-        request.setCode(buildSpjCode(questionId, inputFile, userOutputFile, answerFile));
-
-        // 通过代码沙箱执行
-        ExecuteCodeResponse response = codeSandbox.executeCode(request);
-
-        // 解析结果
-        return convertToSpjResult(response);
-    }
-}
-```
-
-### 4.4 推荐改造路径
-
-```
-阶段一（快速上线）
-    │
-    ▼
-保持本地执行 + 安全加固
-    - 限制 SPJ 代码大小
-    - 限制执行用户权限
-    - 添加超时强制终止
-    │
-    ▼
-阶段二（稳定性提升）
-    │
-    ▼
-进程池 + 资源限制
-    - 使用独立用户运行 SPJ
-    - 配置 cgroups 资源限制
-    - 实现进程池管理
-    │
-    ▼
-阶段三（生产级方案）
-    │
-    ▼
-Docker 容器化执行
-    - 完全资源隔离
-    - 网络隔离
-    - 文件系统隔离
-```
-
-### 4.5 安全加固建议
-
-无论采用哪种方案，都需要：
-
-1. **代码审查**：SPJ 代码上传前进行安全检查
-2. **权限控制**：使用低权限用户执行
-3. **资源限制**：CPU、内存、时间限制
-4. **网络隔离**：禁止 SPJ 访问网络
-5. **文件隔离**：限制文件系统访问范围
-6. **日志审计**：记录所有 SPJ 执行日志
-
----
-
-## 五、部署检查清单
-
-### 5.1 部署前检查
-
-- [ ] 服务器资源满足要求
-- [ ] 所有敏感配置已修改
-- [ ] 数据库已初始化
-- [ ] Redis 服务正常
-- [ ] 代码沙箱服务正常
-- [ ] SSL 证书已配置
-
-### 5.2 部署后验证
-
-- [ ] 后端服务健康检查通过
-- [ ] 前端页面正常访问
-- [ ] 用户注册/登录功能正常
-- [ ] 题目列表加载正常
-- [ ] 代码提交判题正常
-- [ ] SPJ 题目判题正常
-- [ ] 比赛功能正常
-
-### 5.3 性能测试
-
-```bash
-# API 压测
-ab -n 1000 -c 100 http://your-domain/api/question/list
-
-# 数据库连接池监控
-# Redis 内存监控
-```
-
----
-
-## 六、运维建议
-
-### 6.1 监控告警
-
-```yaml
-监控指标:
-  - 后端服务存活状态
-  - JVM 内存使用率
-  - 数据库连接数
-  - Redis 内存使用率
-  - 代码沙箱队列长度
-  - API 响应时间
-
-告警规则:
-  - 服务宕机 → 立即告警
-  - 内存使用 > 80% → 告警
-  - API 响应时间 > 3s → 告警
-```
-
-### 6.2 日志管理
+### 9.1 查看日志
 
 ```bash
 # 后端日志
-/opt/oj/logs/application.log
+tail -f /www/wwwroot/oj/backend/logs/app.log
 
 # Nginx 日志
-/var/log/nginx/access.log
-/var/log/nginx/error.log
-
-# 日志轮转配置
-# /etc/logrotate.d/oj
-/opt/oj/logs/*.log {
-    daily
-    rotate 30
-    compress
-    missingok
-    notifempty
-}
+tail -f /www/wwwlogs/your-domain.com.log
+tail -f /www/wwwlogs/your-domain.com.error.log
 ```
 
-### 6.3 备份策略
+### 9.2 重启服务
 
 ```bash
-# 数据库备份脚本
+# 重启后端
+systemctl restart oj-backend
+
+# 重启 Nginx
+systemctl restart nginx
+
+# 重启 MySQL
+systemctl restart mysql
+
+# 重启 Redis
+systemctl restart redis
+```
+
+### 9.3 数据库备份
+
+在宝塔面板中：
+1. 计划任务 → 添加任务
+2. 任务类型：备份网站
+3. 执行周期：每天
+4. 备份内容：选择 oj 数据库
+
+或使用脚本：
+```bash
 #!/bin/bash
 DATE=$(date +%Y%m%d_%H%M%S)
-mysqldump -u oj_user -p'password' oj > /backup/oj_$DATE.sql
+mysqldump -u oj_user -p'密码' oj > /www/wwwroot/oj/backup/oj_$DATE.sql
+find /www/wwwroot/oj/backup -name "oj_*.sql" -mtime +7 -delete
+```
 
-# 保留最近 7 天备份
-find /backup -name "oj_*.sql" -mtime +7 -delete
+### 9.4 更新代码
+
+```bash
+# 1. 本地重新打包
+mvn clean package -DskipTests
+npm run build
+
+# 2. 上传新文件覆盖旧文件
+
+# 3. 重启后端
+systemctl restart oj-backend
+
+# 4. 清理 Nginx 缓存（如有）
+nginx -s reload
 ```
 
 ---
 
-## 七、常见问题
+## 十、部署完成检查清单
 
-### Q1: SPJ 编译失败？
-检查服务器 JDK 是否正确安装，`javac` 命令是否可用。
+### 部署前
+- [ ] 已购买服务器并获取 IP
+- [ ] 已配置安全组开放必要端口（80、443、22、8888）
+- [ ] 已准备域名（可选）
 
-### Q2: 判题超时？
-检查代码沙箱服务是否正常，网络连接是否稳定。
+### 环境安装
+- [ ] 已安装宝塔面板
+- [ ] 已安装 Nginx
+- [ ] 已安装 MySQL 8.0
+- [ ] 已安装 Redis
+- [ ] 已安装 JDK 8
 
-### Q3: 内存溢出？
-调整 JVM 参数，增加堆内存限制。
+### 数据库配置
+- [ ] 已创建 oj 数据库
+- [ ] 已创建数据库用户并授权
+- [ ] 已导入所有 SQL 脚本
 
-### Q4: 前端页面空白？
-检查 Nginx 配置，确保静态资源正确部署。
+### 应用部署
+- [ ] 已修改 application-prod.yml 配置
+- [ ] 已上传后端 jar 包
+- [ ] 已上传前端 dist 文件
+- [ ] 已启动后端服务
+- [ ] 已配置 Nginx 站点
+
+### 验证测试
+- [ ] 能正常访问首页
+- [ ] 能正常注册用户
+- [ ] 能正常登录
+- [ ] 能正常查看题目列表
+- [ ] 能正常提交代码判题
+- [ ] API 文档能正常访问
 
 ---
 
-## 八、联系与支持
+## 十一、总结
 
-如有问题，请检查：
-1. 服务日志
-2. 数据库日志
-3. Nginx 日志
+本文档详细介绍了从零开始在 Ubuntu 服务器上部署 OJ 系统的完整流程：
+
+| 阶段 | 主要工作 |
+|------|----------|
+| 环境准备 | 安装宝塔面板，一键安装 Nginx/MySQL/Redis/JDK |
+| 数据库配置 | 创建数据库和用户，导入 SQL 脚本 |
+| 项目打包 | 本地 Maven/npm 打包，上传到服务器 |
+| 服务部署 | 启动后端服务，配置 Nginx 反向代理 |
+| 验证测试 | 访问测试各项功能 |
+
+**推荐使用宝塔面板**，可以大大简化运维工作，适合新手快速部署。
 
 祝部署顺利！
