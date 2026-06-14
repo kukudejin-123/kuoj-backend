@@ -484,4 +484,37 @@ public class QuestionController {
         return ResultUtils.success(result);
     }
 
+    /**
+     * 获取全局统计信息（首页展示用）
+     *
+     * @return 统计数据 {totalQuestions, totalSubmissions, totalUsers, totalContests}
+     */
+    @GetMapping("/statistics")
+    public BaseResponse<Map<String, Long>> getGlobalStatistics() {
+        Map<String, Long> result = new HashMap<>();
+
+        // 题目总数
+        long totalQuestions = questionService.count();
+        result.put("totalQuestions", totalQuestions);
+
+        // 总提交数 - 从题目表累加submitNum
+        QueryWrapper<Question> submitQueryWrapper = new QueryWrapper<>();
+        submitQueryWrapper.select("submitNum");
+        List<Question> questions = questionService.list(submitQueryWrapper);
+        long totalSubmissions = questions.stream()
+                .mapToLong(q -> q.getSubmitNum() == null ? 0 : q.getSubmitNum())
+                .sum();
+        result.put("totalSubmissions", totalSubmissions);
+
+        // 用户总数
+        long totalUsers = userService.count();
+        result.put("totalUsers", totalUsers);
+
+        // 比赛总数
+        long totalContests = contestService.count();
+        result.put("totalContests", totalContests);
+
+        return ResultUtils.success(result);
+    }
+
 }
