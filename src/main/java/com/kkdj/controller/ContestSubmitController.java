@@ -18,6 +18,8 @@ import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * 比赛提交接口
@@ -73,5 +75,21 @@ public class ContestSubmitController {
         Page<ContestSubmit> contestSubmitPage = contestSubmitService.page(new Page<>(current, size),
                 contestSubmitService.getQueryWrapper(contestSubmitQueryRequest));
         return ResultUtils.success(contestSubmitService.getContestSubmitVOPage(contestSubmitPage, request));
+    }
+
+    /**
+     * 获取用户在比赛中已通过的题目ID列表
+     */
+    @GetMapping("/accepted_questions")
+    public BaseResponse<Set<Long>> getUserAcceptedQuestions(@RequestParam Long contestId, HttpServletRequest request) {
+        if (contestId == null || contestId <= 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUserPermitNull(request);
+        if (loginUser == null) {
+            return ResultUtils.success(new HashSet<>());
+        }
+        Set<Long> acceptedQuestionIds = contestSubmitService.getUserAcceptedQuestionIds(contestId, loginUser.getId());
+        return ResultUtils.success(acceptedQuestionIds);
     }
 }

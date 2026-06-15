@@ -99,13 +99,29 @@ public class QuestionController {
         question.setThumbNum(0);
 
         // 自动生成题号：查询当前最大题号，+1
-        QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
-        queryWrapper.orderByDesc("questionNumber");
-        queryWrapper.last("LIMIT 1");
-        Question lastQuestion = questionService.getOne(queryWrapper);
+        // 使用 MAX 聚合查询获取最大题号
+        QueryWrapper<Question> maxQueryWrapper = new QueryWrapper<>();
+        maxQueryWrapper.select("MAX(questionNumber) as maxNumber");
+        Map<String, Object> maxResult = questionService.getMap(maxQueryWrapper);
         int nextNumber = 1001; // 默认从1001开始
-        if (lastQuestion != null && lastQuestion.getQuestionNumber() != null) {
-            nextNumber = lastQuestion.getQuestionNumber() + 1;
+        if (maxResult != null && maxResult.get("maxNumber") != null) {
+            Object maxNumberObj = maxResult.get("maxNumber");
+            if (maxNumberObj instanceof Number) {
+                nextNumber = ((Number) maxNumberObj).intValue() + 1;
+            } else if (maxNumberObj instanceof String) {
+                nextNumber = Integer.parseInt((String) maxNumberObj) + 1;
+            }
+        }
+
+        // 检查题号是否已存在，如果存在则递增直到找到可用的题号
+        while (true) {
+            QueryWrapper<Question> existQuery = new QueryWrapper<>();
+            existQuery.eq("questionNumber", nextNumber);
+            long count = questionService.count(existQuery);
+            if (count == 0) {
+                break; // 题号可用
+            }
+            nextNumber++;
         }
         question.setQuestionNumber(nextNumber);
 

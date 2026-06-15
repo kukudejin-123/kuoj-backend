@@ -185,9 +185,20 @@ public class UserRankingServiceImpl extends ServiceImpl<UserRankingMapper, UserR
             return b.getTotalContests() - a.getTotalContests();
         });
 
-        // 7. 设置排名
+        // 7. 设置排名（同分排名相同）
+        int currentRank = 1;
         for (int i = 0; i < voList.size(); i++) {
-            voList.get(i).setRank(i + 1);
+            if (i > 0) {
+                // 检查与前一个用户是否同分
+                UserRankingVO prev = voList.get(i - 1);
+                UserRankingVO curr = voList.get(i);
+                if (prev.getTotalAccepted() != curr.getTotalAccepted() ||
+                    prev.getTotalSubmissions() != curr.getTotalSubmissions()) {
+                    // 不同分数，排名为当前位置+1（但跳过同分的位置）
+                    currentRank = i + 1;
+                }
+            }
+            voList.get(i).setRank(currentRank);
         }
 
         // 8. 分页处理
@@ -274,6 +285,7 @@ public class UserRankingServiceImpl extends ServiceImpl<UserRankingMapper, UserR
         allUserIds.addAll(participants.stream().map(ContestParticipant::getUserId).collect(Collectors.toSet()));
 
         // 计算每个用户的积分，统计比当前用户积分高的数量
+        // 同时统计同分用户的数量
         int higherCount = 0;
         for (Long uid : allUserIds) {
             if (uid.equals(userId)) continue;
@@ -299,6 +311,8 @@ public class UserRankingServiceImpl extends ServiceImpl<UserRankingMapper, UserR
             }
         }
 
+        // 排名 = 比当前用户积分高的用户数 + 1
+        // 同分用户排名相同
         vo.setRank(higherCount + 1);
 
         return vo;

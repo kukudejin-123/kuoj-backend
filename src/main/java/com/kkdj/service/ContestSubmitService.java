@@ -10,6 +10,7 @@ import com.kkdj.model.entity.User;
 import com.kkdj.model.vo.ContestSubmitVO;
 
 import javax.servlet.http.HttpServletRequest;
+import java.util.Set;
 
 /**
  * 比赛提交服务
@@ -40,4 +41,9 @@ public interface ContestSubmitService extends IService<ContestSubmit> {
      * 获取比赛提交详情（包含代码隔离逻辑）
      */
     ContestSubmitVO getContestSubmitVOWithCode(ContestSubmit contestSubmit, User loginUser);
+
+    /**
+     * 获取用户在比赛中已通过的题目ID集合
+     */
+    Set<Long> getUserAcceptedQuestionIds(Long contestId, Long userId);
 }

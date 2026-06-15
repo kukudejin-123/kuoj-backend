@@ -243,22 +243,36 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
                 if (isAccepted) {
                     // 计算提交时间（分钟，从比赛开始计算）
                     long submitTimeMinutes = (submit.getSubmitTime().getTime() - contestStartTime.getTime()) / (60 * 1000);
-                    // 统计该题的错误次数
+                    // 统计该题的错误次数（排除编译错误）
                     QueryWrapper<ContestSubmit> wrapper = new QueryWrapper<>();
                     wrapper.eq("contestId", contestIdFinal);
                     wrapper.eq("questionId", questionIdFinal);
                     wrapper.eq("userId", userIdFinal);
                     wrapper.ne("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+                    // 排除编译错误（通过judgeInfo判断）
+                    wrapper.apply("(judgeInfo IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(judgeInfo, '$.message')) != 'Compile Error')");
                     long wrongCount = ContestSubmitServiceImpl.this.count(wrapper);
                     contestRankingService.updateRanking(contestIdFinal, userIdFinal, questionOrder, true, (int) submitTimeMinutes, (int) wrongCount);
                 } else {
-                    // 记录错误提交（不计入通过）
+                    // 记录错误提交（不计入通过，但只有非编译错误才计入罚时）
+                    // 当前提交是否为编译错误
+                    String judgeInfo = result.getJudgeInfo();
+                    boolean isCompileError = false;
+                    if (judgeInfo != null && judgeInfo.contains("Compile Error")) {
+                        isCompileError = true;
+                    }
+                    // 统计错误次数（排除编译错误）
                     QueryWrapper<ContestSubmit> wrapper = new QueryWrapper<>();
                     wrapper.eq("contestId", contestIdFinal);
                     wrapper.eq("questionId", questionIdFinal);
                     wrapper.eq("userId", userIdFinal);
                     wrapper.ne("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+                    wrapper.apply("(judgeInfo IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(judgeInfo, '$.message')) != 'Compile Error')");
                     long wrongCount = ContestSubmitServiceImpl.this.count(wrapper);
+                    // 如果当前不是编译错误，wrongCount需要+1（当前这次失败）
+                    if (!isCompileError) {
+                        wrongCount += 1;
+                    }
                     contestRankingService.updateRanking(contestIdFinal, userIdFinal, questionOrder, false, 0, (int) wrongCount);
                 }
             } catch (Exception e) {
@@ -290,5 +304,18 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
             vo.setQuestionLabel(ContestQuestionVO.getOrderLabel(contestQuestion.getQuestionOrder()));
         }
         return vo;
+    }
+
+    @Override
+    public Set<Long> getUserAcceptedQuestionIds(Long contestId, Long userId) {
+        QueryWrapper<ContestSubmit> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("contestId", contestId);
+        queryWrapper.eq("userId", userId);
+        queryWrapper.eq("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
+        queryWrapper.select("questionId");
+        List<ContestSubmit> submits = this.list(queryWrapper);
+        return submits.stream()
+                .map(ContestSubmit::getQuestionId)
+                .collect(Collectors.toSet());
     }
 }
