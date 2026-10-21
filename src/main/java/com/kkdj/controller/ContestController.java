@@ -15,6 +15,8 @@ import com.kkdj.model.dto.contest.ContestQueryRequest;
 import com.kkdj.model.dto.contest.ContestUpdateRequest;
 import com.kkdj.model.entity.Contest;
 import com.kkdj.model.entity.User;
+import com.kkdj.model.enums.ContestStatusEnum;
+import com.kkdj.model.enums.TeamUserRoleEnum;
 import com.kkdj.model.vo.ContestVO;
 import com.kkdj.service.ContestParticipantService;
 import com.kkdj.service.ContestService;
@@ -81,13 +83,13 @@ public class ContestController {
         // 检查用户是否是某个团队的队长
         List<Long> teamIds = teamUserMapper.listTeamIdsByUserId(loginUser.getId());
         if (teamIds.isEmpty()) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "您不是任何团队的队长");
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "您还没有加入任何团队");
         }
         // 找到用户作为队长的团队
         Long captainTeamId = null;
         for (Long teamId : teamIds) {
             Integer role = teamUserService.getUserRoleInTeam(teamId, loginUser.getId());
-            if (role != null && role == 2) { // CAPTAIN
+            if (role != null && TeamUserRoleEnum.CAPTAIN.getValue().equals(role)) {
                 captainTeamId = teamId;
                 break;
             }
@@ -199,14 +201,20 @@ public class ContestController {
         if (contestIdObj == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        Long contestId = Long.parseLong(contestIdObj.toString());
+        Long contestId;
+        try {
+            contestId = Long.parseLong(contestIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "比赛ID格式错误");
+        }
         if (contestId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         Contest contest = contestService.getById(contestId);
         ThrowUtils.throwIf(contest == null, ErrorCode.NOT_FOUND_ERROR, "比赛不存在");
         // 检查比赛是否已结束
-        ThrowUtils.throwIf(contest.getStatus() == 2, ErrorCode.PARAMS_ERROR, "比赛已结束，无法报名");
+        ThrowUtils.throwIf(ContestStatusEnum.ENDED.getValue().equals(contest.getStatus()),
+                ErrorCode.PARAMS_ERROR, "比赛已结束，无法报名");
         User loginUser = userService.getLoginUser(request);
         // 检查是否有报名资格
         ThrowUtils.throwIf(!contestService.canJoinContest(contestId, loginUser.getId()),
@@ -224,15 +232,22 @@ public class ContestController {
         if (contestIdObj == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        Long contestId = Long.parseLong(contestIdObj.toString());
+        Long contestId;
+        try {
+            contestId = Long.parseLong(contestIdObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "比赛ID格式错误");
+        }
         if (contestId <= 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         Contest contest = contestService.getById(contestId);
         ThrowUtils.throwIf(contest == null, ErrorCode.NOT_FOUND_ERROR, "比赛不存在");
         // 检查比赛是否已开始
-        ThrowUtils.throwIf(contest.getStatus() == 1, ErrorCode.PARAMS_ERROR, "比赛进行中，无法取消报名");
-        ThrowUtils.throwIf(contest.getStatus() == 2, ErrorCode.PARAMS_ERROR, "比赛已结束，无法取消报名");
+        ThrowUtils.throwIf(ContestStatusEnum.RUNNING.getValue().equals(contest.getStatus()),
+                ErrorCode.PARAMS_ERROR, "比赛进行中，无法取消报名");
+        ThrowUtils.throwIf(ContestStatusEnum.ENDED.getValue().equals(contest.getStatus()),
+                ErrorCode.PARAMS_ERROR, "比赛已结束，无法取消报名");
         User loginUser = userService.getLoginUser(request);
         boolean result = contestParticipantService.quitContest(contestId, loginUser.getId());
         return ResultUtils.success(result);

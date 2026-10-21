@@ -62,6 +62,11 @@ public interface TeamService extends IService<Team> {
     Boolean kickUser(TeamKickRequest teamKickRequest, User loginUser);
 
     /**
+     * 管理员指定/修改团队队长
+     */
+    Boolean setCaptain(Long teamId, Long newCaptainId);
+
+    /**
      * 检查用户是否在团队中
      */
     boolean isUserInTeam(Long teamId, Long userId);

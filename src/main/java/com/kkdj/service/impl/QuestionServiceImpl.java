@@ -107,9 +107,14 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         String sortField = questionQueryRequest.getSortField();
         String sortOrder = questionQueryRequest.getSortOrder();
 
-        // 只显示公开且已审核通过的题目
-        queryWrapper.eq("isPublic", 1);
-        queryWrapper.eq("review_status", 1);
+        // 如果指定了 userId，则查询该用户的所有题目（包括待审核和被拒绝的）
+        // 否则只显示公开且已审核通过的题目
+        if (userId != null) {
+            queryWrapper.eq("userId", userId);
+        } else {
+            queryWrapper.eq("isPublic", 1);
+            queryWrapper.eq("review_status", 1);
+        }
 
         // 拼接查询条件
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);
@@ -121,11 +126,10 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
             }
         }
         queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
-        queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         queryWrapper.eq(ObjectUtils.isNotEmpty(difficulty), "difficulty", difficulty);
         queryWrapper.eq(ObjectUtils.isNotEmpty(questionNumber), "questionNumber", questionNumber);
-        queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
-                sortField);
+        queryWrapper.orderBy(SqlUtils.validSortField(sortField),
+                CommonConstant.SORT_ORDER_ASC.equals(sortOrder), sortField);
         return queryWrapper;
     }
 
@@ -164,8 +168,8 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         queryWrapper.eq(ObjectUtils.isNotEmpty(difficulty), "difficulty", difficulty);
-        queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
-                sortField);
+        queryWrapper.orderBy(SqlUtils.validSortField(sortField),
+                CommonConstant.SORT_ORDER_ASC.equals(sortOrder), sortField);
         return queryWrapper;
     }
 

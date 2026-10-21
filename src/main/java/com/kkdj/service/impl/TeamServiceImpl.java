@@ -371,6 +371,42 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Boolean setCaptain(Long teamId, Long newCaptainId) {
+        Team team = this.getById(teamId);
+        ThrowUtils.throwIf(team == null, ErrorCode.NOT_FOUND_ERROR, "团队不存在");
+        // 检查新队长是否在团队中
+        if (!teamUserService.isUserInTeam(teamId, newCaptainId)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该用户不在团队中");
+        }
+        // 如果新队长就是当前队长，直接返回
+        if (team.getUserId().equals(newCaptainId)) {
+            return true;
+        }
+        // 更新原队长的角色
+        QueryWrapper<TeamUser> oldCaptainWrapper = new QueryWrapper<>();
+        oldCaptainWrapper.eq("teamId", teamId);
+        oldCaptainWrapper.eq("userId", team.getUserId());
+        TeamUser oldCaptainTeamUser = teamUserService.getOne(oldCaptainWrapper);
+        if (oldCaptainTeamUser != null) {
+            oldCaptainTeamUser.setUserRole(TeamUserRoleEnum.MEMBER.getValue());
+            teamUserService.updateById(oldCaptainTeamUser);
+        }
+        // 更新新队长的角色
+        QueryWrapper<TeamUser> newCaptainWrapper = new QueryWrapper<>();
+        newCaptainWrapper.eq("teamId", teamId);
+        newCaptainWrapper.eq("userId", newCaptainId);
+        TeamUser newCaptainTeamUser = teamUserService.getOne(newCaptainWrapper);
+        if (newCaptainTeamUser != null) {
+            newCaptainTeamUser.setUserRole(TeamUserRoleEnum.CAPTAIN.getValue());
+            teamUserService.updateById(newCaptainTeamUser);
+        }
+        // 更新团队的队长
+        team.setUserId(newCaptainId);
+        return this.updateById(team);
+    }
+
+    @Override
     public Integer getUserRoleInTeam(Long teamId, Long userId) {
         return teamUserService.getUserRoleInTeam(teamId, userId);
     }

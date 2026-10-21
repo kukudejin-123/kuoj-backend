@@ -228,6 +228,8 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         if (contest.getVisibility() == null) {
             contest.setVisibility(0);
         }
+        // 校验可见性值
+        validVisibility(contest.getVisibility());
         // 根据时间设置状态
         contest.setStatus(getContestStatus(contest.getStartTime(), contest.getEndTime()));
         this.validContest(contest, true);
@@ -244,11 +246,14 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
             contestQuestion.setScore(100); // 默认分值100
             contestQuestionService.save(contestQuestion);
 
-            // 更新题目的contestId字段（如果题目是非公开的）
-            Question questionUpdate = new Question();
-            questionUpdate.setId(questionId);
-            questionUpdate.setContestId(contest.getId());
-            questionService.updateById(questionUpdate);
+            // 更新题目的contestId字段（仅对非公开题目，避免公开题目被错误关联）
+            Question question = questionService.getById(questionId);
+            if (question != null && question.getIsPublic() != null && question.getIsPublic() == 0) {
+                Question questionUpdate = new Question();
+                questionUpdate.setId(questionId);
+                questionUpdate.setContestId(contest.getId());
+                questionService.updateById(questionUpdate);
+            }
         }
         return contest.getId();
     }
@@ -329,6 +334,15 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         } catch (Exception e) {
             log.error("解析允许团队ID列表失败", e);
             return false;
+        }
+    }
+
+    /**
+     * 校验 visibility 值是否合法（0-公开，1-私有）
+     */
+    private void validVisibility(Integer visibility) {
+        if (visibility != null && visibility != 0 && visibility != 1) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "可见性只能是0（公开）或1（私有）");
         }
     }
 

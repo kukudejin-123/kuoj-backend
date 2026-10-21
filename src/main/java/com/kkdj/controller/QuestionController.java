@@ -632,6 +632,9 @@ public class QuestionController {
     @PostMapping("/review/list")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<QuestionAdminVo>> listReviewQuestions(@RequestBody QuestionQueryRequest questionQueryRequest) {
+        if (questionQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
         long current = questionQueryRequest.getCurrent();
         long size = questionQueryRequest.getPageSize();
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
@@ -657,8 +660,14 @@ public class QuestionController {
         if (idObj == null || statusObj == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
-        Long id = Long.parseLong(idObj.toString());
-        Integer reviewStatus = Integer.parseInt(statusObj.toString());
+        Long id;
+        Integer reviewStatus;
+        try {
+            id = Long.parseLong(idObj.toString());
+            reviewStatus = Integer.parseInt(statusObj.toString());
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数格式错误");
+        }
         if (reviewStatus != 1 && reviewStatus != 2) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "审核状态只能是1（通过）或2（拒绝）");
         }
@@ -673,9 +682,11 @@ public class QuestionController {
         update.setReviewUserId(loginUser.getId());
         String remark = body.get("reviewRemark") != null ? body.get("reviewRemark").toString() : null;
         update.setReviewRemark(remark);
-        // 审核通过时自动公开
+        // 审核通过时自动公开，审核拒绝时设为不公开
         if (reviewStatus == 1) {
             update.setIsPublic(1);
+        } else {
+            update.setIsPublic(0);
         }
         boolean result = questionService.updateById(update);
         return ResultUtils.success(result);
