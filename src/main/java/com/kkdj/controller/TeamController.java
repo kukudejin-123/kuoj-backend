@@ -22,6 +22,7 @@ import com.kkdj.service.TeamService;
 import com.kkdj.service.TeamUserService;
 import com.kkdj.service.UserService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.*;
 
@@ -53,15 +54,18 @@ public class TeamController {
 
     /**
      * 创建团队
-     * 仅管理员可创建
+     * 任何登录用户都可以创建团队，创建者自动成为队长
      */
     @PostMapping("/add")
-    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Long> addTeam(@RequestBody TeamAddRequest teamAddRequest, HttpServletRequest request) {
         if (teamAddRequest == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
+        // 普通用户创建团队时，强制自己为队长（忽略传入的 captainUserId）
+        if (!userService.isAdmin(loginUser)) {
+            teamAddRequest.setCaptainUserId(null);
+        }
         long teamId = teamService.addTeam(teamAddRequest, loginUser);
         return ResultUtils.success(teamId);
     }
@@ -295,6 +299,72 @@ public class TeamController {
         }).collect(Collectors.toList());
         teamUserVOPage.setRecords(teamUserVOList);
         return ResultUtils.success(teamUserVOPage);
+    }
+
+    /**
+     * 管理员指定/修改团队队长
+     * 仅管理员可操作
+     */
+    @PostMapping("/set-captain")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> setCaptain(@RequestBody TeamInviteRequest transferRequest, HttpServletRequest request) {
+        if (transferRequest == null || transferRequest.getTeamId() == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long teamId = transferRequest.getTeamId();
+        // 支持通过 userName 或 userId 指定新队长
+        Long newCaptainId;
+        if (StringUtils.isNotBlank(transferRequest.getUserName())) {
+            QueryWrapper<User> userWrapper = new QueryWrapper<>();
+            userWrapper.eq("userName", transferRequest.getUserName());
+            User newCaptain = userService.getOne(userWrapper);
+            ThrowUtils.throwIf(newCaptain == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+            newCaptainId = newCaptain.getId();
+        } else if (StringUtils.isNotBlank(transferRequest.getUserId())) {
+            try {
+                newCaptainId = Long.parseLong(transferRequest.getUserId());
+            } catch (NumberFormatException e) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户ID格式错误");
+            }
+        } else {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请提供用户名或用户ID");
+        }
+
+        Team team = teamService.getById(teamId);
+        ThrowUtils.throwIf(team == null, ErrorCode.NOT_FOUND_ERROR, "团队不存在");
+
+        // 检查新队长是否在团队中
+        if (!teamUserService.isUserInTeam(teamId, newCaptainId)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该用户不在团队中");
+        }
+
+        // 如果新队长就是当前队长，直接返回
+        if (team.getUserId().equals(newCaptainId)) {
+            return ResultUtils.success(true);
+        }
+
+        // 更新原队长的角色
+        QueryWrapper<TeamUser> oldCaptainWrapper = new QueryWrapper<>();
+        oldCaptainWrapper.eq("teamId", teamId);
+        oldCaptainWrapper.eq("userId", team.getUserId());
+        TeamUser oldCaptainTeamUser = teamUserService.getOne(oldCaptainWrapper);
+        if (oldCaptainTeamUser != null) {
+            oldCaptainTeamUser.setUserRole(TeamUserRoleEnum.MEMBER.getValue());
+            teamUserService.updateById(oldCaptainTeamUser);
+        }
+        // 更新新队长的角色
+        QueryWrapper<TeamUser> newCaptainWrapper = new QueryWrapper<>();
+        newCaptainWrapper.eq("teamId", teamId);
+        newCaptainWrapper.eq("userId", newCaptainId);
+        TeamUser newCaptainTeamUser = teamUserService.getOne(newCaptainWrapper);
+        if (newCaptainTeamUser != null) {
+            newCaptainTeamUser.setUserRole(TeamUserRoleEnum.CAPTAIN.getValue());
+            teamUserService.updateById(newCaptainTeamUser);
+        }
+        // 更新团队的队长
+        team.setUserId(newCaptainId);
+        boolean result = teamService.updateById(team);
+        return ResultUtils.success(result);
     }
 
     // endregion
