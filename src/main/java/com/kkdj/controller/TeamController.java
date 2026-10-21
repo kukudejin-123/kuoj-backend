@@ -187,8 +187,12 @@ public class TeamController {
      */
     @PostMapping("/invite")
     public BaseResponse<Boolean> inviteUser(@RequestBody TeamInviteRequest teamInviteRequest, HttpServletRequest request) {
-        if (teamInviteRequest == null || teamInviteRequest.getTeamId() == null || teamInviteRequest.getUserId() == null) {
+        if (teamInviteRequest == null || teamInviteRequest.getTeamId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        // 必须提供 userName 或 userId 之一
+        if (StringUtils.isBlank(teamInviteRequest.getUserName()) && StringUtils.isBlank(teamInviteRequest.getUserId())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请提供用户名或用户ID");
         }
         User loginUser = userService.getLoginUser(request);
         boolean result = teamService.inviteUser(teamInviteRequest, loginUser);
