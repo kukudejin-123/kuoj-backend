@@ -9,6 +9,7 @@ import com.kkdj.common.ResultUtils;
 import com.kkdj.constant.UserConstant;
 import com.kkdj.exception.BusinessException;
 import com.kkdj.exception.ThrowUtils;
+import com.kkdj.mapper.TeamUserMapper;
 import com.kkdj.model.dto.contest.ContestAddRequest;
 import com.kkdj.model.dto.contest.ContestQueryRequest;
 import com.kkdj.model.dto.contest.ContestUpdateRequest;
@@ -17,6 +18,7 @@ import com.kkdj.model.entity.User;
 import com.kkdj.model.vo.ContestVO;
 import com.kkdj.service.ContestParticipantService;
 import com.kkdj.service.ContestService;
+import com.kkdj.service.TeamUserService;
 import com.kkdj.service.UserService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;
@@ -43,11 +45,17 @@ public class ContestController {
     @Resource
     private UserService userService;
 
+    @Resource
+    private TeamUserMapper teamUserMapper;
+
+    @Resource
+    private TeamUserService teamUserService;
+
     // region 增删改查
 
     /**
      * 创建比赛
-     * 仅管理员可创建
+     * 管理员可创建公开或私有比赛
      */
     @PostMapping("/add")
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
@@ -56,6 +64,40 @@ public class ContestController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
+        long contestId = contestService.addContest(contestAddRequest, loginUser);
+        return ResultUtils.success(contestId);
+    }
+
+    /**
+     * 队长创建比赛
+     * 团队队长可创建私有比赛，仅本团队成员可参加
+     */
+    @PostMapping("/captain/add")
+    public BaseResponse<Long> addCaptainContest(@RequestBody ContestAddRequest contestAddRequest, HttpServletRequest request) {
+        if (contestAddRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        // 检查用户是否是某个团队的队长
+        List<Long> teamIds = teamUserMapper.listTeamIdsByUserId(loginUser.getId());
+        if (teamIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "您不是任何团队的队长");
+        }
+        // 找到用户作为队长的团队
+        Long captainTeamId = null;
+        for (Long teamId : teamIds) {
+            Integer role = teamUserService.getUserRoleInTeam(teamId, loginUser.getId());
+            if (role != null && role == 2) { // CAPTAIN
+                captainTeamId = teamId;
+                break;
+            }
+        }
+        if (captainTeamId == null) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "您不是任何团队的队长");
+        }
+        // 队长创建的比赛强制为私有，仅本团队可参加
+        contestAddRequest.setVisibility(1);
+        contestAddRequest.setAllowedTeamIds("[" + captainTeamId + "]");
         long contestId = contestService.addContest(contestAddRequest, loginUser);
         return ResultUtils.success(contestId);
     }
