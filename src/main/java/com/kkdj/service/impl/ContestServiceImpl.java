@@ -1,6 +1,7 @@
 package com.kkdj.service.impl;
 
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
@@ -33,6 +34,7 @@ import com.kkdj.service.ContestService;
 import com.kkdj.service.QuestionService;
 import com.kkdj.service.UserService;
 import com.kkdj.utils.SqlUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
@@ -47,6 +49,7 @@ import java.util.stream.Collectors;
  * 比赛服务实现
  */
 @Service
+@Slf4j
 public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> implements ContestService {
 
     @Resource
@@ -221,6 +224,10 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
         contest.setUserId(loginUser.getId());
         contest.setQuestionCount(questionIds.size());
         contest.setParticipantCount(0);
+        // 设置可见性（默认公开）
+        if (contest.getVisibility() == null) {
+            contest.setVisibility(0);
+        }
         // 根据时间设置状态
         contest.setStatus(getContestStatus(contest.getStartTime(), contest.getEndTime()));
         this.validContest(contest, true);
@@ -298,14 +305,31 @@ public class ContestServiceImpl extends ServiceImpl<ContestMapper, Contest> impl
     }
 
     @Override
-    public boolean canJoinContest(Long userId) {
-        // 管理员可直接参赛
-        User user = userService.getById(userId);
-        if (userService.isAdmin(user)) {
+    public boolean canJoinContest(Long contestId, Long userId) {
+        Contest contest = this.getById(contestId);
+        if (contest == null) {
+            return false;
+        }
+        // 公开比赛：任何登录用户都能参加
+        if (contest.getVisibility() == null || contest.getVisibility() == 0) {
             return true;
         }
-        // 检查是否加入任意团队
-        return teamUserMapper.listTeamIdsByUserId(userId).size() > 0;
+        // 私有比赛：检查用户是否在允许的团队中
+        String allowedTeamIdsStr = contest.getAllowedTeamIds();
+        if (StringUtils.isBlank(allowedTeamIdsStr)) {
+            return false;
+        }
+        try {
+            List<Long> allowedTeamIds = JSONUtil.toList(allowedTeamIdsStr, Long.class);
+            if (allowedTeamIds.isEmpty()) {
+                return false;
+            }
+            // 检查用户是否在允许的团队中
+            return teamUserMapper.countByTeamIdsAndUserId(allowedTeamIds, userId) > 0;
+        } catch (Exception e) {
+            log.error("解析允许团队ID列表失败", e);
+            return false;
+        }
     }
 
     @Override

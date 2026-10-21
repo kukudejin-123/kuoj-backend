@@ -91,6 +91,16 @@ public class QuestionAdminVo {
      */
     private Integer isPublic;
 
+    /**
+     * 审核状态：0-待审核，1-已通过，2-已拒绝
+     */
+    private Integer reviewStatus;
+
+    /**
+     * 审核备注
+     */
+    private String reviewRemark;
+
     private UserVO user;
 
     /**

@@ -16,4 +16,9 @@ public class UserRegisterRequest implements Serializable {
     private String userPassword;
 
     private String checkPassword;
+
+    /**
+     * 用户名（昵称），注册时必填，全局唯一
+     */
+    private String userName;
 }

@@ -41,10 +41,16 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
     private static final BCryptPasswordEncoder PASSWORD_ENCODER = new BCryptPasswordEncoder();
 
     @Override
-    public long userRegister(String userAccount, String userPassword, String checkPassword) {
+    public long userRegister(String userAccount, String userPassword, String checkPassword, String userName) {
         // 1. 校验
         if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
+        }
+        if (StringUtils.isBlank(userName)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名不能为空");
+        }
+        if (userName.length() > 50) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名过长");
         }
         if (userAccount.length() < 4) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
@@ -64,12 +70,20 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (count > 0) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号重复");
             }
+            // 用户名不能重复
+            QueryWrapper<User> nameWrapper = new QueryWrapper<>();
+            nameWrapper.eq("userName", userName);
+            long nameCount = this.baseMapper.selectCount(nameWrapper);
+            if (nameCount > 0) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名已被使用");
+            }
             // 2. 加密（使用BCrypt）
             String encryptPassword = PASSWORD_ENCODER.encode(userPassword);
             // 3. 插入数据
             User user = new User();
             user.setUserAccount(userAccount);
             user.setUserPassword(encryptPassword);
+            user.setUserName(userName);
             boolean saveResult = this.save(user);
             if (!saveResult) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败，数据库错误");

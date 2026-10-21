@@ -59,6 +59,11 @@ public class QuestionAddRequest implements Serializable {
      */
     private Integer isPublic;
 
+    /**
+     * 审核状态：0-待审核，1-已通过，2-已拒绝（管理员创建时默认1）
+     */
+    private Integer reviewStatus;
+
     @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

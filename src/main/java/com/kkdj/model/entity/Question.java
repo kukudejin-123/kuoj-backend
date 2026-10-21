@@ -42,6 +42,26 @@ public class Question implements Serializable {
     private Integer isPublic;
 
     /**
+     * 审核状态：0-待审核，1-已通过，2-已拒绝
+     */
+    private Integer reviewStatus;
+
+    /**
+     * 审核时间
+     */
+    private Date reviewTime;
+
+    /**
+     * 审核人ID
+     */
+    private Long reviewUserId;
+
+    /**
+     * 审核备注
+     */
+    private String reviewRemark;
+
+    /**
      * 关联比赛id（仅比赛题目）
      */
     private Long contestId;

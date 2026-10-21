@@ -3,6 +3,8 @@
 > 本文档涵盖从零开始在 Ubuntu 服务器上部署 OJ 系统的完整步骤。
 >
 > **服务器配置：2核4G6M Ubuntu**（单机部署，代码沙箱使用 Judge0 公共 API）
+>
+> ⚠️ **重要提示**：4G 内存服务器请使用 **MySQL 5.7**，不要使用 MySQL 8.0！
 
 ---
 
@@ -14,13 +16,22 @@
 |------|------|------|
 | 后端框架 | Spring Boot | 2.7.2 |
 | 前端框架 | Vue 3 | 3.2.13 |
-| 数据库 | MySQL | 8.x |
+| 数据库 | MySQL | **5.7（4G内存必选）** |
 | 缓存 | Redis | 6.x+ |
 | 反向代理 | Nginx | 1.20+ |
 | 代码沙箱 | Judge0 公共 API | - |
 | 对象存储 | 腾讯云 COS | - |
 
-### 1.2 服务依赖
+### 1.2 MySQL 版本选择（关键）
+
+| 服务器内存 | 推荐 MySQL 版本 | 原因 |
+|------------|-----------------|------|
+| **4G 及以下** | **MySQL 5.7** ✅ | 内存占用约 300MB，性能稳定 |
+| **6G 及以上** | MySQL 8.0 | 宝塔面板推荐，内存占用约 500MB |
+
+> ⚠️ **宝塔面板提示**：安装 MySQL 8.0 时会显示"建议 6G 以上内存服务器使用"。你的服务器是 **4G 内存**，请务必选择 **MySQL 5.7**！
+
+### 1.3 服务依赖
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -50,18 +61,31 @@
               └───────────────────────────────┘
 ```
 
-### 1.3 内存占用估算
+### 1.4 内存占用估算
+
+**MySQL 5.7 方案（4G 内存服务器）：**
 
 | 服务 | 内存占用 |
 |------|----------|
-| MySQL | ~500MB |
-| Redis | ~200MB |
+| MySQL 5.7 | ~300MB |
+| Redis | ~150MB |
 | Spring Boot | ~768MB |
 | Nginx | ~50MB |
 | 系统 + 其他 | ~300MB |
-| **总计** | **~1.8GB** |
+| **总计** | **~1.6GB** |
 
-> 留有约 2GB 余量，适合 4G 内存服务器。
+**MySQL 8.0 方案（6G+ 内存服务器）：**
+
+| 服务 | 内存占用 |
+|------|----------|
+| MySQL 8.0 | ~500MB |
+| Redis | ~200MB |
+| Spring Boot | ~1GB |
+| Nginx | ~50MB |
+| 系统 + 其他 | ~300MB |
+| **总计** | **~2GB** |
+
+> 留有充足的内存余量，确保服务稳定运行。
 
 ---
 
@@ -141,11 +165,15 @@ password: xxxxxxxx
 | 组件 | 版本 | 说明 |
 |------|------|------|
 | Nginx | 1.22+ | 必装 |
-| MySQL | 8.0 | 必装 |
+| MySQL | **5.7** ⚠️ | **4G内存必选！不要选8.0** |
 | Redis | 6.0+ | 必装 |
 | Tomcat | 不装 | 不需要 |
 | PHP | 不装 | 不需要 |
 | phpMyAdmin | 可选 | 数据库管理工具 |
+
+> ⚠️ **重要**：宝塔面板安装 MySQL 时会提示版本选择。
+> - **你的服务器是 4G 内存，必须选择 MySQL 5.7！**
+> - MySQL 8.0 宝塔面板会提示"建议 6G 以上内存"，4G 内存使用 8.0 可能导致内存不足、服务崩溃
 
 点击"一键安装"，等待安装完成（约 10-20 分钟）。
 
@@ -168,17 +196,58 @@ password: xxxxxxxx
 
 在宝塔面板的"终端"中执行：
 
+**Debian 12 / Ubuntu 22.04+ 安装 JDK 8：**
+
+Debian 12 和 Ubuntu 22.04+ 默认源没有 OpenJDK 8，需要使用以下方式：
+
+**方式 1：安装 OpenJDK 11（推荐，兼容 JDK 8 项目）**
+
 ```bash
-# 安装 OpenJDK 8
 apt update
-apt install openjdk-8-jdk -y
+apt install openjdk-11-jdk -y
 
 # 验证安装
 java -version
-javac -version
+# 显示 openjdk version "11.x.x" 即成功
 ```
 
-显示版本信息即安装成功。
+> OpenJDK 11 可以运行编译好的 JDK 8 项目，Spring Boot 项目通常可以正常运行。
+
+**方式 2：使用 Adoptium 安装 JDK 8**
+
+```bash
+# 安装依赖
+apt update
+apt install -y wget apt-transport-https
+
+# 添加 Adoptium 源
+wget -O /usr/share/keyrings/adoptium.asc https://packages.adoptium.net/artifactory/api/gpg/key/default
+echo "deb [signed-by=/usr/share/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/debian $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list
+
+# 安装 JDK 8
+apt update
+apt install temurin-8-jdk -y
+
+# 验证
+java -version
+# 显示 openjdk version "1.8.x" 即成功
+```
+
+**方式 3：使用 SDKMAN 安装**
+
+```bash
+# 安装 SDKMAN
+curl -s "https://get.sdkman.io" | bash
+source "$HOME/.sdkman/candidates/java/current/bin"
+
+# 安装 JDK 8
+sdk install java 8.0.392-tem
+
+# 验证
+java -version
+```
+
+> **建议**：如果项目已编译好（jar 包），直接安装 OpenJDK 11 即可，无需折腾 JDK 8。
 
 #### 3.2.3 配置 MySQL
 

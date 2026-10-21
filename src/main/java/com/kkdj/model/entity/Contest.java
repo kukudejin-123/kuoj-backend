@@ -54,6 +54,16 @@ public class Contest implements Serializable {
     private Integer contestType;
 
     /**
+     * 可见性：0-公开，1-私有
+     */
+    private Integer visibility;
+
+    /**
+     * 允许参赛的团队ID列表（JSON数组，私有比赛用）
+     */
+    private String allowedTeamIds;
+
+    /**
      * 状态：0-未开始，1-进行中，2-已结束
      */
     private Integer status;

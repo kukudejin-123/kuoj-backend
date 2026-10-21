@@ -2,15 +2,16 @@
 # 
 # 
 server:
+  address: 0.0.0.0
   port: 8802
 spring:
   # 数据库配置
   # todo 需替换配置
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/my_db
+    url: jdbc:mysql://localhost:3306/oj?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     username: root
-    password: 123456
+    password: asdf785709076@
   # Redis 配置
   # todo 需替换配置
   redis:
@@ -18,13 +19,7 @@ spring:
     host: localhost
     port: 6379
     timeout: 5000
-    password: 123456
-  # Elasticsearch 配置
-  # todo 需替换配置
-  elasticsearch:
-    uris: http://localhost:9200
-    username: root
-    password: 123456
+    password:
 mybatis-plus:
   configuration:
     # 生产环境关闭日志
@@ -38,3 +33,7 @@ knife4j:
 logging:
   level:
     com.kkdj: info  # 生产环境
+# 代码沙箱配置
+codesandbox:
+  type: judge0
+  judge0-url: https://ce.judge0.com/submissions

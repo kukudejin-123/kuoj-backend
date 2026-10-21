@@ -92,6 +92,10 @@ public class QuestionController {
         if (question.getIsPublic() == null) {
             question.setIsPublic(1);
         }
+        // 管理员创建的题目默认审核通过
+        if (question.getReviewStatus() == null) {
+            question.setReviewStatus(1);
+        }
         questionService.validQuestion(question, true);
         User loginUser = userService.getLoginUser(request);
         question.setUserId(loginUser.getId());

@@ -166,9 +166,9 @@ public class ContestController {
         // 检查比赛是否已结束
         ThrowUtils.throwIf(contest.getStatus() == 2, ErrorCode.PARAMS_ERROR, "比赛已结束，无法报名");
         User loginUser = userService.getLoginUser(request);
-        // 检查是否有报名资格（加入任意团队即可）
-        ThrowUtils.throwIf(!contestService.canJoinContest(loginUser.getId()),
-                ErrorCode.NO_AUTH_ERROR, "请先加入一个团队");
+        // 检查是否有报名资格
+        ThrowUtils.throwIf(!contestService.canJoinContest(contestId, loginUser.getId()),
+                ErrorCode.NO_AUTH_ERROR, "您没有资格参加该比赛");
         boolean result = contestParticipantService.joinContest(contestId, loginUser.getId());
         return ResultUtils.success(result);
     }

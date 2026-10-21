@@ -20,5 +20,10 @@ public class TeamInviteRequest implements Serializable {
      */
     private String userId;
 
+    /**
+     * 被邀请用户名（优先使用 userName 查询）
+     */
+    private String userName;
+
     private static final long serialVersionUID = 1L;
 }

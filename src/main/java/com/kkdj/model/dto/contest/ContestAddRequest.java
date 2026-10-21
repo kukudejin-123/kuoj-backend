@@ -42,6 +42,16 @@ public class ContestAddRequest implements Serializable {
     private Integer contestType;
 
     /**
+     * 可见性：0-公开，1-私有
+     */
+    private Integer visibility;
+
+    /**
+     * 允许参赛的团队ID列表（JSON数组，私有比赛用）
+     */
+    private String allowedTeamIds;
+
+    /**
      * 题目ID列表
      */
     private List<Long> questionIds;

@@ -103,11 +103,13 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         String answer = questionQueryRequest.getAnswer();
         Long userId = questionQueryRequest.getUserId();
         Integer difficulty = questionQueryRequest.getDifficulty();
+        Integer questionNumber = questionQueryRequest.getQuestionNumber();
         String sortField = questionQueryRequest.getSortField();
         String sortOrder = questionQueryRequest.getSortOrder();
 
-        // 只显示公开题目
+        // 只显示公开且已审核通过的题目
         queryWrapper.eq("isPublic", 1);
+        queryWrapper.eq("reviewStatus", 1);
 
         // 拼接查询条件
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);
@@ -121,6 +123,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
         queryWrapper.eq(ObjectUtils.isNotEmpty(id), "id", id);
         queryWrapper.eq(ObjectUtils.isNotEmpty(userId), "userId", userId);
         queryWrapper.eq(ObjectUtils.isNotEmpty(difficulty), "difficulty", difficulty);
+        queryWrapper.eq(ObjectUtils.isNotEmpty(questionNumber), "questionNumber", questionNumber);
         queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
                 sortField);
         return queryWrapper;

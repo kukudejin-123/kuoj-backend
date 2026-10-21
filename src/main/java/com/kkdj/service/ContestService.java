@@ -51,7 +51,7 @@ public interface ContestService extends IService<Contest> {
     /**
      * 检查用户是否可以报名比赛
      */
-    boolean canJoinContest(Long userId);
+    boolean canJoinContest(Long contestId, Long userId);
 
     /**
      * 检查比赛是否正在进行

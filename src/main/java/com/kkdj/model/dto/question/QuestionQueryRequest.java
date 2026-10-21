@@ -55,5 +55,20 @@ public class QuestionQueryRequest extends PageRequest implements Serializable {
      */
     private Integer isPublic;
 
+    /**
+     * 题号（从1001开始）
+     */
+    private Integer questionNumber;
+
+    /**
+     * 最低通过率（百分比，0-100）
+     */
+    private Integer minAcceptRate;
+
+    /**
+     * 最高通过率（百分比，0-100）
+     */
+    private Integer maxAcceptRate;
+
     private static final long serialVersionUID = 1L;
 }

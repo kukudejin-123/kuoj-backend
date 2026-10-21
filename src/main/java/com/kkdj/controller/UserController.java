@@ -1,5 +1,6 @@
 package com.kkdj.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.kkdj.annotation.AuthCheck;
 import com.kkdj.common.BaseResponse;
@@ -75,10 +76,14 @@ public class UserController {
         String userAccount = userRegisterRequest.getUserAccount();
         String userPassword = userRegisterRequest.getUserPassword();
         String checkPassword = userRegisterRequest.getCheckPassword();
+        String userName = userRegisterRequest.getUserName();
         if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数不能为空");
         }
-        long result = userService.userRegister(userAccount, userPassword, checkPassword);
+        if (StringUtils.isBlank(userName)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名不能为空");
+        }
+        long result = userService.userRegister(userAccount, userPassword, checkPassword, userName);
         return ResultUtils.success(result);
     }
 
@@ -315,6 +320,20 @@ public class UserController {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         User loginUser = userService.getLoginUser(request);
+        // 如果修改了用户名，校验唯一性
+        String newUserName = userUpdateMyRequest.getUserName();
+        if (StringUtils.isNotBlank(newUserName) && !newUserName.equals(loginUser.getUserName())) {
+            if (newUserName.length() > 50) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名过长");
+            }
+            QueryWrapper<User> nameWrapper = new QueryWrapper<>();
+            nameWrapper.eq("userName", newUserName);
+            nameWrapper.ne("id", loginUser.getId());
+            long nameCount = userService.count(nameWrapper);
+            if (nameCount > 0) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名已被使用");
+            }
+        }
         User user = new User();
         BeanUtils.copyProperties(userUpdateMyRequest, user);
         user.setId(loginUser.getId());

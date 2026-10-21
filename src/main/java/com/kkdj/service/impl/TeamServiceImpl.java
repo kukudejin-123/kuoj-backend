@@ -265,16 +265,26 @@ public class TeamServiceImpl extends ServiceImpl<TeamMapper, Team> implements Te
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Boolean inviteUser(TeamInviteRequest teamInviteRequest, User loginUser) {
-        if (teamInviteRequest == null || teamInviteRequest.getTeamId() == null || teamInviteRequest.getUserId() == null) {
+        if (teamInviteRequest == null || teamInviteRequest.getTeamId() == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR);
         }
         Long teamId = teamInviteRequest.getTeamId();
-        // 处理字符串类型的 userId，避免前端大数精度丢失
+        // 优先通过 userName 查询用户，其次通过 userId
         Long userId;
-        try {
-            userId = Long.parseLong(teamInviteRequest.getUserId());
-        } catch (NumberFormatException e) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户ID格式错误");
+        if (StringUtils.isNotBlank(teamInviteRequest.getUserName())) {
+            QueryWrapper<User> userWrapper = new QueryWrapper<>();
+            userWrapper.eq("userName", teamInviteRequest.getUserName());
+            User inviteUser = userService.getOne(userWrapper);
+            ThrowUtils.throwIf(inviteUser == null, ErrorCode.NOT_FOUND_ERROR, "用户不存在");
+            userId = inviteUser.getId();
+        } else if (StringUtils.isNotBlank(teamInviteRequest.getUserId())) {
+            try {
+                userId = Long.parseLong(teamInviteRequest.getUserId());
+            } catch (NumberFormatException e) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户ID格式错误");
+            }
+        } else {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请提供用户名或用户ID");
         }
         Team team = this.getById(teamId);
         ThrowUtils.throwIf(team == null, ErrorCode.NOT_FOUND_ERROR, "团队不存在");
