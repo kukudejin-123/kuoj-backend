@@ -34,6 +34,11 @@ public class QuestionSubmitQueryRequest extends PageRequest implements Serializa
     private Long questionId;
 
     /**
+     * 题号（从1001开始）
+     */
+    private Integer questionNumber;
+
+    /**
      * 用户 id
      */
     private Long userId;

@@ -147,6 +147,7 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         String language = questionSubmitQueryRequest.getLanguage();
         String status = questionSubmitQueryRequest.getStatus();
         Long questionId = questionSubmitQueryRequest.getQuestionId();
+        Integer questionNumber = questionSubmitQueryRequest.getQuestionNumber();
         Long userId = questionSubmitQueryRequest.getUserId();
         String userName = questionSubmitQueryRequest.getUserName();
         String judgeResult = questionSubmitQueryRequest.getJudgeResult();
@@ -162,14 +163,27 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
         queryWrapper.eq(QuestionSubmitStatusEnum.getEnumByValue(status)!=null, "status", status);
         queryWrapper.eq("isDelete", 0);
 
+        // 按题号查询：先根据题号查出题目ID
+        if (ObjectUtils.isNotEmpty(questionNumber)) {
+            QueryWrapper<Question> questionWrapper = new QueryWrapper<>();
+            questionWrapper.eq("questionNumber", questionNumber);
+            Question question = questionService.getOne(questionWrapper);
+            if (question != null) {
+                queryWrapper.eq("questionId", question.getId());
+            } else {
+                // 题号不存在，返回空结果
+                queryWrapper.eq("questionId", -1);
+            }
+        }
+
         // 用户名筛选（需要关联用户表，在Controller中处理）
         // judgeInfo 中的 message 筛选（需要用 like 查询 JSON 字符串）
         if (StringUtils.isNotBlank(judgeResult)) {
             queryWrapper.like("judgeInfo", "\"" + judgeResult + "\"");
         }
 
-        queryWrapper.orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC),
-                sortField);
+        queryWrapper.orderBy(SqlUtils.validSortField(sortField),
+                CommonConstant.SORT_ORDER_ASC.equals(sortOrder), sortField);
         return queryWrapper;
     }
 
@@ -262,11 +276,11 @@ public class QuestionSubmitServiceImpl extends ServiceImpl<QuestionSubmitMapper,
 
         long totalCount = this.count(queryWrapper);
 
-        // 查询通过数量 (judgeInfo 中包含 "成功")
+        // 查询通过数量（status = 2 表示成功）
         QueryWrapper<QuestionSubmit> acceptWrapper = new QueryWrapper<>();
         acceptWrapper.eq("userId", userId);
         acceptWrapper.eq("isDelete", 0);
-        acceptWrapper.like("judgeInfo", "\"message\":\"成功\"");
+        acceptWrapper.eq("status", QuestionSubmitStatusEnum.SUCCEED.getValue());
 
         long acceptCount = this.count(acceptWrapper);
 

@@ -17,6 +17,11 @@ public class QuestionAdminVo {
     private Long id;
 
     /**
+     * 题号（从1001开始）
+     */
+    private Integer questionNumber;
+
+    /**
      * 标题
      */
     private String title;
@@ -50,6 +55,11 @@ public class QuestionAdminVo {
      * 题目通过数
      */
     private Integer acceptedNum;
+
+    /**
+     * 题目难度（0-简单，1-中等，2-困难）
+     */
+    private Integer difficulty;
 
     /**
      * 判题用例（json 数组）

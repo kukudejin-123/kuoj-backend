@@ -491,13 +491,22 @@ public class QuestionController {
     /**
      * 获取用户提交统计信息
      *
-     * @param request
+     * @param userId 可选，指定要查询的用户ID；不传则查询当前登录用户
      * @return 统计数据 {submitCount, acceptCount}
      */
     @GetMapping("/question_submit/statistics")
-    public BaseResponse<Map<String, Long>> getUserSubmitStatistics(HttpServletRequest request) {
-        User loginUser = userService.getLoginUser(request);
-        long[] statistics = questionSubmitService.getUserSubmitStatistics(loginUser.getId());
+    public BaseResponse<Map<String, Long>> getUserSubmitStatistics(
+            @RequestParam(required = false) Long userId,
+            HttpServletRequest request) {
+        Long targetUserId;
+        if (userId != null && userId > 0) {
+            // 查询指定用户的统计（公开接口，用于查看他人主页）
+            targetUserId = userId;
+        } else {
+            User loginUser = userService.getLoginUser(request);
+            targetUserId = loginUser.getId();
+        }
+        long[] statistics = questionSubmitService.getUserSubmitStatistics(targetUserId);
         Map<String, Long> result = new HashMap<>();
         result.put("submitCount", statistics[0]);
         result.put("acceptCount", statistics[1]);

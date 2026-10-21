@@ -224,9 +224,11 @@ public class StatisticsController {
 
         // 分布：0次, 1-5次, 6-20次, 21-50次, 50次以上
         int[] distribution = new int[5];
+        // 0次档 = 总用户数 - 有提交记录的用户数
+        long totalUsers = userService.count();
+        distribution[0] = (int) Math.max(0, totalUsers - userSubmitCount.size());
         for (int count : userSubmitCount.values()) {
-            if (count == 0) distribution[0]++;
-            else if (count <= 5) distribution[1]++;
+            if (count <= 5) distribution[1]++;
             else if (count <= 20) distribution[2]++;
             else if (count <= 50) distribution[3]++;
             else distribution[4]++;
