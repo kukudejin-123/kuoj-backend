@@ -73,9 +73,9 @@ public class StatisticsController {
         // 题目统计
         long totalQuestions = questionService.count();
         long publicQuestions = questionService.count(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.kkdj.model.entity.Question>()
-                .eq("isPublic", 1).eq("reviewStatus", 1));
+                .eq("isPublic", 1).eq("review_status", 1));
         long pendingReview = questionService.count(new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.kkdj.model.entity.Question>()
-                .eq("reviewStatus", 0));
+                .eq("review_status", 0));
         result.put("totalQuestions", totalQuestions);
         result.put("publicQuestions", publicQuestions);
         result.put("pendingReview", pendingReview);
@@ -167,7 +167,7 @@ public class StatisticsController {
         // 获取所有公开且审核通过的题目
         List<com.kkdj.model.entity.Question> questions = questionService.list(
                 new com.baomidou.mybatisplus.core.conditions.query.QueryWrapper<com.kkdj.model.entity.Question>()
-                        .eq("isPublic", 1).eq("reviewStatus", 1)
+                        .eq("isPublic", 1).eq("review_status", 1)
                         .select("id", "title", "questionNumber", "submitNum", "acceptedNum", "difficulty"));
 
         // 通过率分布：0-20%, 20-40%, 40-60%, 60-80%, 80-100%

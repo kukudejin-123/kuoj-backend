@@ -636,7 +636,7 @@ public class QuestionController {
         long size = questionQueryRequest.getPageSize();
         ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
         QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
-        queryWrapper.eq("reviewStatus", 0); // 待审核
+        queryWrapper.eq("review_status", 0); // 待审核
         String title = questionQueryRequest.getTitle();
         if (StringUtils.isNotBlank(title)) {
             queryWrapper.like("title", title);

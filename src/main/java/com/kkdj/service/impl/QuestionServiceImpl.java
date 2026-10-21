@@ -109,7 +109,7 @@ public class QuestionServiceImpl extends ServiceImpl<QuestionMapper, Question>
 
         // 只显示公开且已审核通过的题目
         queryWrapper.eq("isPublic", 1);
-        queryWrapper.eq("reviewStatus", 1);
+        queryWrapper.eq("review_status", 1);
 
         // 拼接查询条件
         queryWrapper.like(StringUtils.isNotBlank(title), "title", title);

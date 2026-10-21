@@ -44,21 +44,25 @@ public class Question implements Serializable {
     /**
      * 审核状态：0-待审核，1-已通过，2-已拒绝
      */
+    @TableField("review_status")
     private Integer reviewStatus;
 
     /**
      * 审核时间
      */
+    @TableField("review_time")
     private Date reviewTime;
 
     /**
      * 审核人ID
      */
+    @TableField("review_user_id")
     private Long reviewUserId;
 
     /**
      * 审核备注
      */
+    @TableField("review_remark")
     private String reviewRemark;
 
     /**

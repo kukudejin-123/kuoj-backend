@@ -56,11 +56,13 @@ public class Contest implements Serializable {
     /**
      * 可见性：0-公开，1-私有
      */
+    @TableField("visibility")
     private Integer visibility;
 
     /**
      * 允许参赛的团队ID列表（JSON数组，私有比赛用）
      */
+    @TableField("allowed_team_ids")
     private String allowedTeamIds;
 
     /**
