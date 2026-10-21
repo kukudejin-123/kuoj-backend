@@ -537,4 +537,150 @@ public class QuestionController {
         return ResultUtils.success(result);
     }
 
+    // endregion
+
+    // region 用户出题与审核
+
+    /**
+     * 用户提交出题（需要管理员审核）
+     */
+    @PostMapping("/user/add")
+    public BaseResponse<Long> addUserQuestion(@RequestBody QuestionAddRequest questionAddRequest, HttpServletRequest request) {
+        if (questionAddRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        // 管理员不能出题（管理员直接用 /question/add）
+        if (userService.isAdmin(loginUser)) {
+            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "管理员请使用管理后台创建题目");
+        }
+        Question question = new Question();
+        BeanUtils.copyProperties(questionAddRequest, question);
+        List<String> tags = questionAddRequest.getTags();
+        if (tags != null) {
+            question.setTags(JSONUtil.toJsonStr(tags));
+        }
+        List<JudgeCase> judgeCase = questionAddRequest.getJudgeCase();
+        if (judgeCase != null) {
+            question.setJudgeCase(JSONUtil.toJsonStr(judgeCase));
+        }
+        JudgeConfig judgeConfig = questionAddRequest.getJudgeConfig();
+        if (judgeConfig != null) {
+            question.setJudgeConfig(JSONUtil.toJsonStr(judgeConfig));
+        }
+        // 用户出题：默认不公开，审核状态为待审核
+        question.setIsPublic(0);
+        question.setReviewStatus(0);
+        question.setUserId(loginUser.getId());
+        question.setFavourNum(0);
+        question.setThumbNum(0);
+        question.setSubmitNum(0);
+        question.setAcceptedNum(0);
+        questionService.validQuestion(question, true);
+
+        // 自动生成题号
+        QueryWrapper<Question> maxQueryWrapper = new QueryWrapper<>();
+        maxQueryWrapper.select("MAX(questionNumber) as maxNumber");
+        Map<String, Object> maxResult = questionService.getMap(maxQueryWrapper);
+        int nextNumber = 1001;
+        if (maxResult != null && maxResult.get("maxNumber") != null) {
+            Object maxNumberObj = maxResult.get("maxNumber");
+            if (maxNumberObj instanceof Number) {
+                nextNumber = ((Number) maxNumberObj).intValue() + 1;
+            } else if (maxNumberObj instanceof String) {
+                nextNumber = Integer.parseInt((String) maxNumberObj) + 1;
+            }
+        }
+        while (true) {
+            QueryWrapper<Question> existQuery = new QueryWrapper<>();
+            existQuery.eq("questionNumber", nextNumber);
+            long count = questionService.count(existQuery);
+            if (count == 0) {
+                break;
+            }
+            nextNumber++;
+        }
+        question.setQuestionNumber(nextNumber);
+
+        boolean result = questionService.save(question);
+        ThrowUtils.throwIf(!result, ErrorCode.OPERATION_ERROR, "出题失败");
+        return ResultUtils.success(question.getId());
+    }
+
+    /**
+     * 获取我的出题列表
+     */
+    @PostMapping("/my/questions")
+    public BaseResponse<Page<QuestionVO>> listMyQuestions(@RequestBody QuestionQueryRequest questionQueryRequest,
+            HttpServletRequest request) {
+        if (questionQueryRequest == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        User loginUser = userService.getLoginUser(request);
+        questionQueryRequest.setUserId(loginUser.getId());
+        long current = questionQueryRequest.getCurrent();
+        long size = questionQueryRequest.getPageSize();
+        ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        Page<Question> questionPage = questionService.page(new Page<>(current, size),
+                questionService.getQueryWrapper(questionQueryRequest));
+        return ResultUtils.success(questionService.getQuestionVOPage(questionPage, request));
+    }
+
+    /**
+     * 获取待审核题目列表（仅管理员）
+     */
+    @PostMapping("/review/list")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Page<QuestionAdminVo>> listReviewQuestions(@RequestBody QuestionQueryRequest questionQueryRequest) {
+        long current = questionQueryRequest.getCurrent();
+        long size = questionQueryRequest.getPageSize();
+        ThrowUtils.throwIf(size > 20, ErrorCode.PARAMS_ERROR);
+        QueryWrapper<Question> queryWrapper = new QueryWrapper<>();
+        queryWrapper.eq("reviewStatus", 0); // 待审核
+        String title = questionQueryRequest.getTitle();
+        if (StringUtils.isNotBlank(title)) {
+            queryWrapper.like("title", title);
+        }
+        queryWrapper.orderByDesc("createTime");
+        Page<Question> questionPage = questionService.page(new Page<>(current, size), queryWrapper);
+        return ResultUtils.success(questionService.getQuestionAdminVOPage(questionPage, null));
+    }
+
+    /**
+     * 审核题目（仅管理员）
+     */
+    @PostMapping("/review")
+    @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
+    public BaseResponse<Boolean> reviewQuestion(@RequestBody Map<String, Object> body, HttpServletRequest request) {
+        Object idObj = body.get("id");
+        Object statusObj = body.get("reviewStatus");
+        if (idObj == null || statusObj == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR);
+        }
+        Long id = Long.parseLong(idObj.toString());
+        Integer reviewStatus = Integer.parseInt(statusObj.toString());
+        if (reviewStatus != 1 && reviewStatus != 2) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "审核状态只能是1（通过）或2（拒绝）");
+        }
+        Question question = questionService.getById(id);
+        ThrowUtils.throwIf(question == null, ErrorCode.NOT_FOUND_ERROR, "题目不存在");
+
+        User loginUser = userService.getLoginUser(request);
+        Question update = new Question();
+        update.setId(id);
+        update.setReviewStatus(reviewStatus);
+        update.setReviewTime(new Date());
+        update.setReviewUserId(loginUser.getId());
+        String remark = body.get("reviewRemark") != null ? body.get("reviewRemark").toString() : null;
+        update.setReviewRemark(remark);
+        // 审核通过时自动公开
+        if (reviewStatus == 1) {
+            update.setIsPublic(1);
+        }
+        boolean result = questionService.updateById(update);
+        return ResultUtils.success(result);
+    }
+
+    // endregion
+
 }
