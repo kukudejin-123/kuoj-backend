@@ -164,21 +164,17 @@ public class JudgeServiceImpl implements JudgeService {
                 throw new BusinessException(ErrorCode.OPERATION_ERROR, "题目状态更新失败");
             }
 
-            // 7）更新题目的提交数和通过数
-            Question questionUpdate = new Question();
-            questionUpdate.setId(questionId);
-            Integer currentSubmitNum = question.getSubmitNum();
-            Integer currentAcceptedNum = question.getAcceptedNum();
-
-            int newSubmitNum = currentSubmitNum == null ? 1 : currentSubmitNum + 1;
-            questionUpdate.setSubmitNum(newSubmitNum);
+            // 7）更新题目的提交数和通过数（使用 SQL 原子更新，避免并发问题）
             if (isAccepted) {
-                int newAcceptedNum = currentAcceptedNum == null ? 1 : currentAcceptedNum + 1;
-                questionUpdate.setAcceptedNum(newAcceptedNum);
-            }
-            boolean updateQuestion = questionService.updateById(questionUpdate);
-            if (!updateQuestion) {
-                log.error("更新题目统计信息失败, questionId={}", questionId);
+                questionService.update()
+                        .eq("id", questionId)
+                        .setSql("submitNum = submitNum + 1, acceptedNum = acceptedNum + 1")
+                        .update();
+            } else {
+                questionService.update()
+                        .eq("id", questionId)
+                        .setSql("submitNum = submitNum + 1")
+                        .update();
             }
         } catch (Exception e) {
             log.error("判题失败, submitId={}", questionSubmitId, e);
