@@ -25,3 +25,6 @@ ALTER TABLE question ADD INDEX idx_review_status (review_status);
 
 -- 5. 为 contest 表的 visibility 添加索引
 ALTER TABLE contest ADD INDEX idx_visibility (visibility);
+
+-- 6. user 表 userName 唯一索引（必须先执行 fix_username_unique.sql 清理历史数据）
+-- ALTER TABLE user ADD UNIQUE INDEX uk_userName (userName);
