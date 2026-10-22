@@ -164,11 +164,6 @@ public class ContestSubmitServiceImpl extends ServiceImpl<ContestSubmitMapper, C
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long doContestSubmit(ContestSubmitAddRequest contestSubmitAddRequest, User loginUser) {
-        // 管理员不能提交代码
-        if (userService.isAdmin(loginUser)) {
-            throw new BusinessException(ErrorCode.NO_AUTH_ERROR, "管理员不能提交代码");
-        }
-
         Long contestId = contestSubmitAddRequest.getContestId();
         Long questionId = contestSubmitAddRequest.getQuestionId();
         String language = contestSubmitAddRequest.getLanguage();
